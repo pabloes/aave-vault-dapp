@@ -1,7 +1,5 @@
 # Aave Vault DApp
 
-git log![App Screenshot](./docs/screenshot.png)
-
 A minimal, client-only savings dApp with hard timelock vaults depositing into Aave V3. Create multiple independent vaults, deposit an ERC20 asset, accrue Aave yield, and prevent withdrawals until a chosen release time.
 
 ## Features
@@ -11,6 +9,8 @@ A minimal, client-only savings dApp with hard timelock vaults depositing into Aa
 - Client-only React app (Vite) to create vaults, deposit, and withdraw (after time).
 - No admin backdoors in vaults; non-upgradeable, immutable owner.
 - **Automatic aToken detection** - no need to manually provide aToken addresses!
+
+![App Screenshot](./docs/screenshot.png)
 
 ## Monorepo Layout
 - `contracts/` — Hardhat project with Solidity contracts and deploy scripts
