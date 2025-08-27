@@ -1,5 +1,7 @@
 # Aave Vault DApp
 
+git log![App Screenshot](./docs/screenshot.png)
+
 A minimal, client-only savings dApp with hard timelock vaults depositing into Aave V3. Create multiple independent vaults, deposit an ERC20 asset, accrue Aave yield, and prevent withdrawals until a chosen release time.
 
 ## Features
