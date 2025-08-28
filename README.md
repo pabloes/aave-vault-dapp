@@ -9,6 +9,9 @@ A minimal, client-only savings dApp with hard timelock vaults depositing into Aa
 - Client-only React app (Vite) to create vaults, deposit, and withdraw (after time).
 - No admin backdoors in vaults; non-upgradeable, immutable owner.
 - **Automatic aToken detection** - no need to manually provide aToken addresses!
+ 
+Test it here: https://pabloes.github.io/aave-vault-dapp/
+
 
 ![App Screenshot](./docs/screenshot.png)
 
