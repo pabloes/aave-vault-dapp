@@ -274,6 +274,9 @@ export default function App() {
         <button onClick={handleConnect} disabled={!!account}>{account ? short(account) : 'Connect Wallet'}</button>
         <span>Chain: {chainId ?? '—'}</span>
         <button onClick={downloadThisWebApp}>Download this web-app</button>
+        <a href="https://github.com/pabloes/aave-vault-dapp/releases/latest" target="_blank" rel="noreferrer">
+          <button type="button">Download Desktop App</button>
+        </a>
       </div>
 
       <hr style={{ margin: '24px 0' }} />
