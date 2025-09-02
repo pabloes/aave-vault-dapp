@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🏦 Aave Vault DApp
 
 Una aplicación descentralizada completa para crear y gestionar vaults con timelock en Aave V3, incluyendo una aplicación de escritorio Electron.
