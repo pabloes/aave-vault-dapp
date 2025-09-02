@@ -1,0 +1,28 @@
+{
+  "name": "aave-vault-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "lint": "prettier --check .",
+    "format": "prettier --write .",
+    "deploy:factory": "hardhat run scripts/deployFactory.ts"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.12.12",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.2",
+    "hardhat": "^2.22.11",
+    "prettier": "^3.3.3",
+    "solidity-coverage": "^0.8.16",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

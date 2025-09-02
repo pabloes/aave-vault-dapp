@@ -7,17 +7,18 @@ A minimal, client-only savings dApp with hard timelock vaults depositing into Aa
 - Extend-only lock (can only increase `releaseTime`).
 - Factory to create and index user vaults on-chain.
 - Client-only React app (Vite) to create vaults, deposit, and withdraw (after time).
+- **Desktop Electron app** with custom icon for native desktop experience.
 - No admin backdoors in vaults; non-upgradeable, immutable owner.
 - **Automatic aToken detection** - no need to manually provide aToken addresses!
  
 Test it here: https://pabloes.github.io/aave-vault-dapp/
-
 
 ![App Screenshot](./docs/screenshot.png)
 
 ## Monorepo Layout
 - `contracts/` — Hardhat project with Solidity contracts and deploy scripts
 - `frontend/` — Vite + React app
+- `desktop/` — Electron desktop application
 
 ---
 
@@ -112,6 +113,41 @@ pnpm preview
 
 ---
 
+## 3) Desktop App
+
+### Install
+```bash
+cd desktop
+npm install
+```
+
+### Development
+```bash
+npm run dev
+```
+
+### Build Desktop App
+```bash
+npm run build        # Build for all platforms
+npm run build:mac    # macOS only
+npm run build:win    # Windows only
+npm run build:linux  # Linux only
+```
+
+### Custom Icon Generation
+```bash
+npm run generate-icons
+```
+
+### Features
+- **Native desktop experience** with Electron
+- **Custom icon** with hand holding padlock design
+- **Multi-platform support** (macOS, Windows, Linux)
+- **Integrated web interface** - same as the web version
+- **Secure configuration** with context isolation
+
+---
+
 ## Addresses You Need (per network)
 - Aave V3 Pool address for your network
 - Deployed `VaultFactory` address (from your own deployment)
@@ -127,6 +163,7 @@ Consult Aave docs and explorers to find official addresses. Example resources: A
 - Vaults are not upgradeable. Review code before deploying.
 - Always double-check the Aave Pool address you provide.
 - The factory validates that the asset is supported by the pool before creating a vault.
+- Desktop app uses secure Electron configuration with `nodeIntegration: false`.
 
 ---
 
