@@ -18,7 +18,7 @@ contract VaultFactory {
     ) external returns (address vault) {
         // Get aToken address from the pool
         IPool poolContract = IPool(pool);
-        (,,,,,,,, address aTokenAddress,,,,) = poolContract.getReserveData(asset);
+        (,,,,,,,, address aTokenAddress,,,) = poolContract.getReserveData(asset);
         require(aTokenAddress != address(0), "Asset not supported by pool");
         
         TimelockAaveVault v = new TimelockAaveVault(msg.sender, asset, pool, aTokenAddress, releaseTime);
