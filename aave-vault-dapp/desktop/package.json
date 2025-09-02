@@ -1,0 +1,42 @@
+{
+  "name": "aave-vault-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder -mwl",
+    "generate-icons": "node scripts/generate-icons.js",
+    "build-with-icons": "npm run generate-icons && electron-builder -mwl"
+  },
+  "build": {
+    "appId": "com.aavevault.desktop",
+    "productName": "Aave Vault DApp",
+    "icon": "assets/icon.png",
+    "files": [
+      "main.js",
+      "index.html"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "identity": null
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "sharp": "^0.34.3"
+  }
+}
