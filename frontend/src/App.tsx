@@ -167,6 +167,13 @@ export default function App() {
         }
         if (!addressesProvider) return
         const addrProv = new Contract(addressesProvider, ADDRESSES_PROVIDER_ABI, provider)
+        // Auto-fill Pool address from AddressesProvider if not set
+        try {
+          const poolAddrAuto: string = await addrProv.getPool()
+          if (poolAddrAuto && !createParams.pool) {
+            setCreateParams(p => ({ ...p, pool: poolAddrAuto }))
+          }
+        } catch {}
         const dp: string = await addrProv.getPoolDataProvider()
         setDataProviderAddr(dp)
         const dataProv = new Contract(dp, DATA_PROVIDER_ABI, provider)
@@ -315,9 +322,7 @@ export default function App() {
         <button onClick={handleConnect} disabled={!!account}>{account ? short(account) : 'Connect Wallet'}</button>
         <span>Chain: {chainId ?? '—'}</span>
         <button onClick={downloadThisWebApp}>Download this web-app</button>
-        <a href="https://github.com/pabloes/aave-vault-dapp/releases/latest" target="_blank" rel="noreferrer">
-          <button type="button">Download Desktop App</button>
-        </a>
+        {/* Desktop app button removed */}
       </div>
 
       <hr style={{ margin: '24px 0' }} />
@@ -389,15 +394,18 @@ export default function App() {
 }
 
 function QuickDatePicker({ value, onChange }: { value: string, onChange: (v: string) => void }) {
+  function toLocalIso(dt: Date) {
+    return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0,16)
+  }
   function setOffsetDays(days: number) {
-    const d = new Date()
-    d.setDate(d.getDate() + days)
-    onChange(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16))
+    const base = value ? new Date(value) : new Date()
+    base.setDate(base.getDate() + days)
+    onChange(toLocalIso(base))
   }
   function setOffsetYears(years: number) {
-    const d = new Date()
-    d.setFullYear(d.getFullYear() + years)
-    onChange(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16))
+    const base = value ? new Date(value) : new Date()
+    base.setFullYear(base.getFullYear() + years)
+    onChange(toLocalIso(base))
   }
   function formatRelativeText(val: string): string {
     if (!val) return 'Select a release date.'
@@ -421,7 +429,10 @@ function QuickDatePicker({ value, onChange }: { value: string, onChange: (v: str
     return ms >= 0 ? `Releases on ${when} (in ${span})` : `Release time passed (${span} ago) • ${when}`
   }
   useEffect(() => {
-    if (!value) setOffsetDays(30)
+    if (!value) {
+      const now = new Date()
+      onChange(new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0,16))
+    }
   }, [])
   return (
     <div style={{ display: 'grid', gap: 6 }}>
