@@ -39,7 +39,31 @@ const config: HardhatUserConfig = {
     optimism: {
       url: process.env.OPTIMISM_RPC || "",
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
+    },
+    base: {
+      url: process.env.BASE_RPC || "",
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
     }
+  },
+  etherscan: {
+    apiKey: {
+      mainnet: process.env.ETHERSCAN_API_KEY || "",
+      sepolia: process.env.ETHERSCAN_API_KEY || "",
+      polygon: process.env.POLYGONSCAN_API_KEY || "",
+      arbitrumOne: process.env.ARBISCAN_API_KEY || "",
+      optimisticEthereum: process.env.OPTIMISM_ETHERSCAN_API_KEY || "",
+      base: process.env.BASESCAN_API_KEY || ""
+    },
+    customChains: [
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://api.basescan.org/api",
+          browserURL: "https://basescan.org"
+        }
+      }
+    ]
   }
 };
 
