@@ -34,12 +34,17 @@ export interface TimelockAaveVaultInterface extends Interface {
       | "owner"
       | "pool"
       | "releaseTime"
+      | "sweepATokensAfterRelease"
       | "withdraw"
       | "withdrawAll"
   ): FunctionFragment;
 
   getEvent(
-    nameOrSignatureOrTopic: "Deposited" | "LockExtended" | "Withdrawn"
+    nameOrSignatureOrTopic:
+      | "ATokensSwept"
+      | "Deposited"
+      | "LockExtended"
+      | "Withdrawn"
   ): EventFragment;
 
   encodeFunctionData(functionFragment: "aToken", values?: undefined): string;
@@ -61,6 +66,10 @@ export interface TimelockAaveVaultInterface extends Interface {
   encodeFunctionData(
     functionFragment: "releaseTime",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "sweepATokensAfterRelease",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "withdraw",
@@ -85,11 +94,33 @@ export interface TimelockAaveVaultInterface extends Interface {
     functionFragment: "releaseTime",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "sweepATokensAfterRelease",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "withdraw", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "withdrawAll",
     data: BytesLike
   ): Result;
+}
+
+export namespace ATokensSweptEvent {
+  export type InputTuple = [
+    owner: AddressLike,
+    amount: BigNumberish,
+    to: AddressLike
+  ];
+  export type OutputTuple = [owner: string, amount: bigint, to: string];
+  export interface OutputObject {
+    owner: string;
+    amount: bigint;
+    to: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace DepositedEvent {
@@ -202,6 +233,12 @@ export interface TimelockAaveVault extends BaseContract {
 
   releaseTime: TypedContractMethod<[], [bigint], "view">;
 
+  sweepATokensAfterRelease: TypedContractMethod<
+    [to: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   withdraw: TypedContractMethod<
     [amount: BigNumberish, to: AddressLike],
     [void],
@@ -239,6 +276,9 @@ export interface TimelockAaveVault extends BaseContract {
     nameOrSignature: "releaseTime"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "sweepATokensAfterRelease"
+  ): TypedContractMethod<[to: AddressLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "withdraw"
   ): TypedContractMethod<
     [amount: BigNumberish, to: AddressLike],
@@ -249,6 +289,13 @@ export interface TimelockAaveVault extends BaseContract {
     nameOrSignature: "withdrawAll"
   ): TypedContractMethod<[to: AddressLike], [void], "nonpayable">;
 
+  getEvent(
+    key: "ATokensSwept"
+  ): TypedContractEvent<
+    ATokensSweptEvent.InputTuple,
+    ATokensSweptEvent.OutputTuple,
+    ATokensSweptEvent.OutputObject
+  >;
   getEvent(
     key: "Deposited"
   ): TypedContractEvent<
@@ -272,6 +319,17 @@ export interface TimelockAaveVault extends BaseContract {
   >;
 
   filters: {
+    "ATokensSwept(address,uint256,address)": TypedContractEvent<
+      ATokensSweptEvent.InputTuple,
+      ATokensSweptEvent.OutputTuple,
+      ATokensSweptEvent.OutputObject
+    >;
+    ATokensSwept: TypedContractEvent<
+      ATokensSweptEvent.InputTuple,
+      ATokensSweptEvent.OutputTuple,
+      ATokensSweptEvent.OutputObject
+    >;
+
     "Deposited(address,uint256)": TypedContractEvent<
       DepositedEvent.InputTuple,
       DepositedEvent.OutputTuple,

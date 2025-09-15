@@ -55,6 +55,35 @@ const DEFAULT_ADDRESSES_PROVIDER: Record<number, string> = {
   11155111: '0x012bAC54348C0E635dCAc49D8EF0093B445d2E'   // Sepolia (example)
 }
 
+// Selectable chains for quick switching
+const CHAIN_LIST: { id: number, name: string }[] = [
+  { id: 1, name: 'Ethereum' },
+  { id: 137, name: 'Polygon' },
+  { id: 42161, name: 'Arbitrum' },
+  { id: 10, name: 'Optimism' },
+  { id: 8453, name: 'Base' },
+  { id: 11155111, name: 'Sepolia (testnet)' },
+]
+
+type AddChainParams = {
+  chainId: string
+  chainName: string
+  nativeCurrency: { name: string, symbol: string, decimals: number }
+  rpcUrls: string[]
+  blockExplorerUrls?: string[]
+}
+
+const CHAIN_PARAMS: Record<number, AddChainParams> = {
+  1: { chainId: '0x1', chainName: 'Ethereum Mainnet', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://cloudflare-eth.com'], blockExplorerUrls: ['https://etherscan.io'] },
+  137: { chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] },
+  42161: { chainId: '0xa4b1', chainName: 'Arbitrum One', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://arb1.arbitrum.io/rpc'], blockExplorerUrls: ['https://arbiscan.io'] },
+  10: { chainId: '0xa', chainName: 'OP Mainnet', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://mainnet.optimism.io'], blockExplorerUrls: ['https://optimistic.etherscan.io'] },
+  8453: { chainId: '0x2105', chainName: 'Base', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://mainnet.base.org'], blockExplorerUrls: ['https://basescan.org'] },
+  11155111: { chainId: '0xaa36a7', chainName: 'Sepolia', nativeCurrency: { name: 'Sepolia Ether', symbol: 'SEP', decimals: 18 }, rpcUrls: ['https://rpc.sepolia.org'], blockExplorerUrls: ['https://sepolia.etherscan.io'] },
+}
+
+function toHexChainId(id: number): string { return '0x' + id.toString(16) }
+
 function useProvider() {
   const [provider, setProvider] = useState<BrowserProvider | null>(null)
   useEffect(() => {
@@ -236,6 +265,20 @@ export default function App() {
     setAccount(acc)
   }
 
+  async function switchChain(targetId: number) {
+    const eth = (window as any).ethereum
+    if (!eth) return
+    try {
+      await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: toHexChainId(targetId) }] })
+    } catch (e: any) {
+      if (e?.code === 4902) {
+        const params = CHAIN_PARAMS[targetId]
+        if (!params) return
+        await eth.request({ method: 'wallet_addEthereumChain', params: [params] })
+      }
+    }
+  }
+
   async function downloadThisWebApp() {
     const isDev = import.meta.env.DEV
     if (isDev) {
@@ -320,7 +363,15 @@ export default function App() {
       <h1>Aave Timelock Vaults</h1>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <button onClick={handleConnect} disabled={!!account}>{account ? short(account) : 'Connect Wallet'}</button>
-        <span>Chain: {chainId ?? '—'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>Chain:</span>
+          <select value={chainId ?? ''} onChange={e => { const id = Number(e.target.value); if (id) switchChain(id) }}>
+            <option value="">Select</option>
+            {CHAIN_LIST.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
         <button onClick={downloadThisWebApp}>Download this web-app</button>
         {/* Desktop app button removed */}
       </div>
@@ -516,6 +567,21 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
     await refreshBalance()
   }
 
+  async function sweepATokens() {
+    if (!provider || !info) return
+    const signer = await provider.getSigner()
+    const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+    const now = Math.floor(Date.now() / 1000)
+    const release: number = info.releaseTime
+    if (now < release) {
+      alert('Vault is still locked')
+      return
+    }
+    const tx = await (vault as any).connect(signer).sweepATokensAfterRelease(await signer.getAddress())
+    await tx.wait()
+    await refreshBalance()
+  }
+
   async function withdrawPartial() {
     if (!provider || !info) return
     const signer = await provider.getSigner()
@@ -559,6 +625,7 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <button onClick={withdrawPartial}>Withdraw</button>
         <button onClick={withdrawAll}>Withdraw All</button>
+        <button onClick={sweepATokens}>Sweep aTokens</button>
       </div>
     </div>
   )

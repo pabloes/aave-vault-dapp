@@ -10,6 +10,7 @@ contract TimelockAaveVault {
     event Deposited(address indexed owner, uint256 amount);
     event Withdrawn(address indexed owner, uint256 amount, address to);
     event LockExtended(uint256 oldReleaseTime, uint256 newReleaseTime);
+    event ATokensSwept(address indexed owner, uint256 amount, address to);
 
     address public immutable owner;
     IERC20 public immutable asset;
@@ -77,6 +78,16 @@ contract TimelockAaveVault {
         uint256 amount = maxWithdrawable();
         pool.withdraw(address(asset), type(uint256).max, to);
         emit Withdrawn(msg.sender, amount, to);
+    }
+
+    /// @notice Transfers all aTokens to `to` after release time. This allows owner to self-manage redemption if pool withdrawals are unavailable temporarily.
+    function sweepATokensAfterRelease(address to) external onlyOwner {
+        require(block.timestamp >= releaseTime, "locked");
+        require(to != address(0), "to=0");
+        uint256 amount = aToken.balanceOf(address(this));
+        require(amount > 0, "no aTokens");
+        require(aToken.transfer(to, amount), "transfer failed");
+        emit ATokensSwept(msg.sender, amount, to);
     }
 
     /// @notice Extends the lock to a later timestamp. Cannot decrease.
