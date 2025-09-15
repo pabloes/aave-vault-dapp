@@ -1,0 +1,49 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build single-file
+        working-directory: frontend
+        run: npm run build:single
+
+      - name: Prepare desktop assets
+        run: |
+          cp -f frontend/dist/index.html desktop/index.html
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build Electron app (mac/win/linux)
+        working-directory: desktop
+        run: npm run build
+
+      - name: Upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/dist/*.dmg
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
