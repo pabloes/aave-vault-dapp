@@ -415,9 +415,11 @@ export default function App() {
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="checkbox" checked={verifyAfterDeploy} onChange={e => setVerifyAfterDeploy(e.target.checked)} /> Verify after deploy
           </label>
-          <label>Explorer API Key (for verification):&nbsp;
-            <input style={{ width: 420 }} value={explorerApiKey} onChange={e => setExplorerApiKey(e.target.value)} placeholder="Etherscan/Polygonscan/etc API key" />
-          </label>
+          {verifyAfterDeploy && (
+            <label>Explorer API Key (for verification):&nbsp;
+              <input style={{ width: 420 }} value={explorerApiKey} onChange={e => setExplorerApiKey(e.target.value)} placeholder="Etherscan/Polygonscan/etc API key" />
+            </label>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           <button onClick={refreshVaults} disabled={!factory || !account}>Load My Vaults</button>
