@@ -144,6 +144,8 @@ export default function App() {
   const [reserves, setReserves] = useState<{ symbol: string, address: string }[]>([])
   const [currentApy, setCurrentApy] = useState<string>('')
   const [addressesProviderAddr, setAddressesProviderAddr] = useState<string>('')
+  const [verifyAfterDeploy, setVerifyAfterDeploy] = useState<boolean>(false)
+  const [explorerApiKey, setExplorerApiKey] = useState<string>('')
 
   const [createParams, setCreateParams] = useState({
     asset: '',
@@ -161,6 +163,8 @@ export default function App() {
       if (saved.addressesProviderAddr) setAddressesProviderAddr(saved.addressesProviderAddr)
       if (saved.dataProviderAddr) setDataProviderAddr(saved.dataProviderAddr)
       if (saved.createParams) setCreateParams((p) => ({ ...p, ...saved.createParams }))
+      if (typeof saved.verifyAfterDeploy === 'boolean') setVerifyAfterDeploy(saved.verifyAfterDeploy)
+      if (saved.explorerApiKey) setExplorerApiKey(saved.explorerApiKey)
     } catch {}
   }, [])
 
@@ -248,10 +252,10 @@ export default function App() {
   // Persist settings to localStorage
   useEffect(() => {
     try {
-      const st = { factoryAddress, addressesProviderAddr, dataProviderAddr, createParams }
+      const st = { factoryAddress, addressesProviderAddr, dataProviderAddr, createParams, verifyAfterDeploy, explorerApiKey }
       localStorage.setItem('avs_settings', JSON.stringify(st))
     } catch {}
-  }, [factoryAddress, addressesProviderAddr, dataProviderAddr, createParams])
+  }, [factoryAddress, addressesProviderAddr, dataProviderAddr, createParams, verifyAfterDeploy, explorerApiKey])
 
   const [myVaults, setMyVaults] = useState<string[]>([])
 
@@ -353,6 +357,24 @@ export default function App() {
       const addr = await contract.getAddress()
       setFactoryAddress(addr)
       alert(`Factory deployed at ${addr}`)
+
+      if (verifyAfterDeploy) {
+        try {
+          const net = await provider.getNetwork()
+          const id = Number(net.chainId)
+          const networkName = (id === 1 ? 'mainnet' : id === 11155111 ? 'sepolia' : id === 137 ? 'polygon' : id === 42161 ? 'arbitrum' : id === 10 ? 'optimism' : id === 8453 ? 'base' : '')
+          const envVar = (id === 1 || id === 11155111) ? 'ETHERSCAN_API_KEY' : id === 137 ? 'POLYGONSCAN_API_KEY' : id === 42161 ? 'ARBISCAN_API_KEY' : id === 10 ? 'OPTIMISM_ETHERSCAN_API_KEY' : id === 8453 ? 'BASESCAN_API_KEY' : ''
+          if (!networkName || !envVar) {
+            alert('Verification helper: this network is not mapped for auto command. Please verify manually.')
+          } else if (!explorerApiKey) {
+            alert('Verification helper: please provide an Explorer API key in Settings.')
+          } else {
+            const cmd = `${envVar}=${explorerApiKey} npx hardhat verify --network ${networkName} ${addr}`
+            try { await navigator.clipboard.writeText(cmd) } catch {}
+            alert(`Verification command copied to clipboard:\n\n${cmd}`)
+          }
+        } catch {}
+      }
     } catch (e: any) {
       alert(`Deploy failed: ${e.message}`)
     }
@@ -389,6 +411,12 @@ export default function App() {
           </label>
           <label>Pool Data Provider (auto from AddressesProvider):&nbsp;
             <input style={{ width: 420 }} value={dataProviderAddr} onChange={e => setDataProviderAddr(e.target.value)} placeholder="0x... (auto)" />
+          </label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" checked={verifyAfterDeploy} onChange={e => setVerifyAfterDeploy(e.target.checked)} /> Verify after deploy
+          </label>
+          <label>Explorer API Key (for verification):&nbsp;
+            <input style={{ width: 420 }} value={explorerApiKey} onChange={e => setExplorerApiKey(e.target.value)} placeholder="Etherscan/Polygonscan/etc API key" />
           </label>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
