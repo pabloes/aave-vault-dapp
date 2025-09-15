@@ -110,11 +110,6 @@ cache/
 artifacts/
 typechain-types/
 
-# Electron
-out/
-app/
-packages/
-
 # Temporary files
 tmp/
 temp/
