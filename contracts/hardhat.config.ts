@@ -33,7 +33,7 @@ const config: HardhatUserConfig = {
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
     },
     arbitrum: {
-      url: process.env.ARBITRUM_RPC || "",
+      url: process.env.ARBITRUM_RPC || "https://arb1.arbitrum.io/rpc",
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
     },
     optimism: {
