@@ -355,6 +355,30 @@ export default function App() {
         alert('Release time must be in the future')
         return
       }
+
+      // Preflight validation: ensure pool is resolvable and supports asset
+      let poolAddr = createParams.pool
+      try {
+        if (!poolAddr && addressesProviderAddr) {
+          poolAddr = await new Contract(addressesProviderAddr, ADDRESSES_PROVIDER_ABI, provider).getPool()
+        }
+      } catch {}
+      if (!poolAddr) {
+        alert('Pool address missing or cannot be resolved from AddressesProvider')
+        return
+      }
+      try {
+        const pool = new Contract(poolAddr, POOL_ABI, provider)
+        const rd: any = await pool.getReserveData(createParams.asset)
+        const aTokenAddr = rd[8] || rd[9] || rd.aTokenAddress || ''
+        if (!aTokenAddr || aTokenAddr === '0x0000000000000000000000000000000000000000') {
+          alert('Selected Pool does not support the provided asset')
+          return
+        }
+      } catch {
+        alert('Failed to read reserve data. Check Pool and Asset addresses for this chain.')
+        return
+      }
       
       // Create vault without aToken parameter - factory will derive it automatically
       setIsCreatingVault(true)
@@ -410,6 +434,28 @@ export default function App() {
     }
   }
 
+  async function prepareVerifyForAddress(addr: string) {
+    try {
+      if (!provider) return
+      const net = await provider.getNetwork()
+      const id = Number(net.chainId)
+      const networkName = (id === 1 ? 'mainnet' : id === 11155111 ? 'sepolia' : id === 137 ? 'polygon' : id === 42161 ? 'arbitrum' : id === 10 ? 'optimism' : id === 8453 ? 'base' : '')
+      const envVar = (id === 1 || id === 11155111) ? 'ETHERSCAN_API_KEY' : id === 137 ? 'POLYGONSCAN_API_KEY' : id === 42161 ? 'ARBISCAN_API_KEY' : id === 10 ? 'OPTIMISM_ETHERSCAN_API_KEY' : id === 8453 ? 'BASESCAN_API_KEY' : ''
+      if (!networkName || !envVar) {
+        setVerifyCommand('Unsupported network for verification helper.')
+        return
+      }
+      if (!explorerApiKey) {
+        setVerifyCommand('Please provide an Explorer API Key above to compose the verify command.')
+        return
+      }
+      const cmd = `${envVar}=${explorerApiKey} npx hardhat verify --network ${networkName} ${addr}`
+      setVerifyCommand(cmd)
+    } catch {
+      setVerifyCommand('Could not prepare verification command. Check network/provider.')
+    }
+  }
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 24, fontFamily: 'Inter, system-ui, Arial' }}>
       <h1>Aave Timelock Vaults</h1>
@@ -454,6 +500,7 @@ export default function App() {
         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
           <button onClick={refreshVaults} disabled={!factory || !account || isLoadingVaults}>Load My Vaults{isLoadingVaults ? '…' : ''}</button>
           <button onClick={deployFactory} disabled={!account || isDeployingFactory}>Deploy Factory{isDeployingFactory ? '…' : ''}</button>
+          <button onClick={() => { if (factoryAddress) prepareVerifyForAddress(factoryAddress) }} disabled={!factoryAddress}>Verify</button>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input placeholder="Import vault address" value={importInput} onChange={e => setImportInput(e.target.value)} style={{ width: 280 }} />
             <button type="button" onClick={() => {
