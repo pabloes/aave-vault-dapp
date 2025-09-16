@@ -146,6 +146,13 @@ export default function App() {
   const [addressesProviderAddr, setAddressesProviderAddr] = useState<string>('')
   const [verifyAfterDeploy, setVerifyAfterDeploy] = useState<boolean>(false)
   const [explorerApiKey, setExplorerApiKey] = useState<string>('')
+  const [verifyCommand, setVerifyCommand] = useState<string>('')
+  const [isDeployingFactory, setIsDeployingFactory] = useState<boolean>(false)
+  const [isLoadingVaults, setIsLoadingVaults] = useState<boolean>(false)
+  const [isCreatingVault, setIsCreatingVault] = useState<boolean>(false)
+  const [loadingReserves, setLoadingReserves] = useState<boolean>(false)
+  const [importedVaults, setImportedVaults] = useState<string[]>([])
+  const [importInput, setImportInput] = useState<string>('')
 
   const [createParams, setCreateParams] = useState({
     asset: '',
@@ -180,6 +187,10 @@ export default function App() {
         setChainId(Number(net.chainId))
         const def = DEFAULT_ADDRESSES_PROVIDER[Number(net.chainId)]
         if (def) setAddressesProviderAddr(def)
+        try {
+          const raw = localStorage.getItem(`avs_imported:${Number(net.chainId)}`)
+          setImportedVaults(raw ? JSON.parse(raw) : [])
+        } catch { setImportedVaults([]) }
       } catch {
         setChainId(null)
       }
@@ -191,6 +202,7 @@ export default function App() {
     if (!provider) return
     ;(async () => {
       try {
+        setLoadingReserves(true)
         let addressesProvider: string | null = null
         if (addressesProviderAddr) {
           addressesProvider = addressesProviderAddr
@@ -219,6 +231,8 @@ export default function App() {
       } catch (e) {
         setReserves([])
         setDataProviderAddr('')
+      } finally {
+        setLoadingReserves(false)
       }
     })()
   }, [provider, createParams.pool, addressesProviderAddr])
@@ -256,6 +270,12 @@ export default function App() {
       localStorage.setItem('avs_settings', JSON.stringify(st))
     } catch {}
   }, [factoryAddress, addressesProviderAddr, dataProviderAddr, createParams, verifyAfterDeploy, explorerApiKey])
+
+  // Persist imported vaults per-chain
+  useEffect(() => {
+    if (!chainId) return
+    try { localStorage.setItem(`avs_imported:${chainId}`, JSON.stringify(importedVaults)) } catch {}
+  }, [chainId, importedVaults])
 
   const [myVaults, setMyVaults] = useState<string[]>([])
 
@@ -315,8 +335,13 @@ export default function App() {
 
   async function refreshVaults() {
     if (!factory || !account) return
-    const list: string[] = await factory.getVaultsByOwner(account)
-    setMyVaults(list)
+    setIsLoadingVaults(true)
+    try {
+      const list: string[] = await factory.getVaultsByOwner(account)
+      setMyVaults(list)
+    } finally {
+      setIsLoadingVaults(false)
+    }
   }
 
   async function createVault(e: React.FormEvent) {
@@ -332,6 +357,7 @@ export default function App() {
       }
       
       // Create vault without aToken parameter - factory will derive it automatically
+      setIsCreatingVault(true)
       const tx = await (factory as any).connect(signer).createVault(createParams.asset, createParams.pool, rel)
       await tx.wait()
       await refreshVaults()
@@ -340,6 +366,8 @@ export default function App() {
       setCreateParams(p => ({ ...p, releaseIso: '' }))
     } catch (error: any) {
       alert(`Error creating vault: ${error.message}`)
+    } finally {
+      setIsCreatingVault(false)
     }
   }
 
@@ -352,6 +380,7 @@ export default function App() {
     try {
       const signer = await provider.getSigner()
       const cf = new ContractFactory(FACTORY_ABI as any, FACTORY_BYTECODE, signer)
+      setIsDeployingFactory(true)
       const contract = await cf.deploy()
       await contract.waitForDeployment()
       const addr = await contract.getAddress()
@@ -365,18 +394,19 @@ export default function App() {
           const networkName = (id === 1 ? 'mainnet' : id === 11155111 ? 'sepolia' : id === 137 ? 'polygon' : id === 42161 ? 'arbitrum' : id === 10 ? 'optimism' : id === 8453 ? 'base' : '')
           const envVar = (id === 1 || id === 11155111) ? 'ETHERSCAN_API_KEY' : id === 137 ? 'POLYGONSCAN_API_KEY' : id === 42161 ? 'ARBISCAN_API_KEY' : id === 10 ? 'OPTIMISM_ETHERSCAN_API_KEY' : id === 8453 ? 'BASESCAN_API_KEY' : ''
           if (!networkName || !envVar) {
-            alert('Verification helper: this network is not mapped for auto command. Please verify manually.')
+            setVerifyCommand('')
           } else if (!explorerApiKey) {
-            alert('Verification helper: please provide an Explorer API key in Settings.')
+            setVerifyCommand('')
           } else {
             const cmd = `${envVar}=${explorerApiKey} npx hardhat verify --network ${networkName} ${addr}`
-            try { await navigator.clipboard.writeText(cmd) } catch {}
-            alert(`Verification command copied to clipboard:\n\n${cmd}`)
+            setVerifyCommand(cmd)
           }
         } catch {}
       }
     } catch (e: any) {
       alert(`Deploy failed: ${e.message}`)
+    } finally {
+      setIsDeployingFactory(false)
     }
   }
 
@@ -421,10 +451,28 @@ export default function App() {
             </label>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button onClick={refreshVaults} disabled={!factory || !account}>Load My Vaults</button>
-          <button onClick={deployFactory} disabled={!account}>Deploy Factory</button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <button onClick={refreshVaults} disabled={!factory || !account || isLoadingVaults}>Load My Vaults{isLoadingVaults ? '…' : ''}</button>
+          <button onClick={deployFactory} disabled={!account || isDeployingFactory}>Deploy Factory{isDeployingFactory ? '…' : ''}</button>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input placeholder="Import vault address" value={importInput} onChange={e => setImportInput(e.target.value)} style={{ width: 280 }} />
+            <button type="button" onClick={() => {
+              if (!importInput || !(window as any).ethers?.isAddress ? false : false) {
+                // noop; handled below with local isAddress
+              }
+              if (!importInput || !(importInput.startsWith('0x') && importInput.length === 42)) { alert('Invalid address'); return }
+              if (importedVaults.includes(importInput)) { alert('Already added'); return }
+              setImportedVaults(v => [...v, importInput])
+              setImportInput('')
+            }}>Add</button>
+          </div>
         </div>
+        {verifyCommand && (
+          <div style={{ marginTop: 8, padding: 8, background: '#f8f8f8', border: '1px solid #eee', borderRadius: 6 }}>
+            <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>Verify command (run in your terminal):</div>
+            <code style={{ fontSize: 12, wordBreak: 'break-all' }}>{verifyCommand}</code>
+          </div>
+        )}
       </section>
 
       <hr style={{ margin: '24px 0' }} />
@@ -452,7 +500,7 @@ export default function App() {
           )}
           <input placeholder="Aave V3 Pool address (auto from AddressesProvider)" value={createParams.pool} onChange={e => setCreateParams(p => ({ ...p, pool: e.target.value }))} />
           <QuickDatePicker value={createParams.releaseIso} onChange={(v) => setCreateParams(p => ({ ...p, releaseIso: v }))} />
-          <button type="submit" disabled={!factory || !account}>Create Vault</button>
+          <button type="submit" disabled={!factory || !account || isCreatingVault || loadingReserves}>Create Vault{isCreatingVault ? '…' : ''}</button>
         </form>
         <p style={{ fontSize: '14px', color: '#666', marginTop: '8px' }}>
           💡 The aToken address is automatically derived from the pool - no need to provide it!
@@ -464,10 +512,9 @@ export default function App() {
       <section>
         <h2>My Vaults</h2>
         <div style={{ display: 'grid', gap: 12 }}>
-          {myVaults.length === 0 && <div>No vaults found.</div>}
-          {myVaults.map(addr => (
+          {(() => { const all = Array.from(new Set([...(importedVaults||[]), ...myVaults])); return all.length === 0 ? <div>No vaults found.</div> : all.map(addr => (
             <VaultCard key={addr} vaultAddress={addr} provider={provider} />
-          ))}
+          )) })()}
         </div>
       </section>
     </div>
@@ -535,6 +582,7 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
   const [balance, setBalance] = useState<string>('0')
 
   const [decimals, setDecimals] = useState<number>(18)
+  const [isDepositing, setIsDepositing] = useState<boolean>(false)
 
   useEffect(() => {
     if (!provider) return
@@ -566,18 +614,48 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
     const erc20 = new Contract(info.asset, [
       "function approve(address spender, uint256 amount) returns (bool)",
       "function allowance(address owner, address spender) view returns (uint256)",
-      "function balanceOf(address owner) view returns (uint256)"
+      "function balanceOf(address owner) view returns (uint256)",
+      "function nonces(address) view returns (uint256)",
+      "function name() view returns (string)"
     ], provider)
 
-    const allowance: bigint = await erc20.allowance(await signer.getAddress(), vaultAddress)
-    if (allowance < amt) {
-      const tx = await (erc20 as any).connect(signer).approve(vaultAddress, amt)
-      await tx.wait()
+    setIsDepositing(true)
+    try {
+      const owner = await signer.getAddress()
+      // Try permit route
+      try {
+        const nonce: bigint = await (erc20 as any).nonces(owner)
+        const chain = await provider.getNetwork()
+        const domain = { name: await (erc20 as any).name(), version: '1', chainId: Number(chain.chainId), verifyingContract: info.asset }
+        const types: any = { Permit: [
+          { name: 'owner', type: 'address' },
+          { name: 'spender', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'nonce', type: 'uint256' },
+          { name: 'deadline', type: 'uint256' }
+        ] }
+        const deadline = Math.floor(Date.now() / 1000) + 3600
+        const message = { owner, spender: vaultAddress, value: amt, nonce, deadline }
+        const signature = await (signer as any).signTypedData(domain, types, message)
+        const r = '0x' + signature.slice(2, 66)
+        const s = '0x' + signature.slice(66, 130)
+        const v = parseInt(signature.slice(130, 132), 16)
+        const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+        await (vault as any).connect(signer).depositWithPermit(amt, deadline, v, r, s)
+      } catch {
+        // fallback to approve + deposit
+        const allowance: bigint = await (erc20 as any).allowance(owner, vaultAddress)
+        if (allowance < amt) {
+          const tx = await (erc20 as any).connect(signer).approve(vaultAddress, amt)
+          await tx.wait()
+        }
+        const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+        const tx2 = await (vault as any).connect(signer).deposit(amt)
+        await tx2.wait()
+      }
+    } finally {
+      setIsDepositing(false)
     }
-
-    const vault = new Contract(vaultAddress, VAULT_ABI, provider)
-    const tx2 = await (vault as any).connect(signer).deposit(amt)
-    await tx2.wait()
     setAmount('')
     await refreshBalance()
   }
@@ -648,8 +726,8 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
       </div>
 
       <form onSubmit={approveAndDeposit} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <input placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} />
-        <button type="submit">Approve + Deposit</button>
+        <input placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} disabled={isDepositing} />
+        <button type="submit" disabled={isDepositing}>{isDepositing ? 'Processing…' : 'Approve/Permit + Deposit'}</button>
       </form>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

@@ -3,6 +3,18 @@ pragma solidity ^0.8.24;
 
 import { IPool, IERC20 } from "./interfaces/IAaveV3.sol";
 
+interface IERC20Permit {
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+}
+
 /// @title TimelockAaveVault
 /// @notice A self-custodied, non-upgradeable timelock vault that deposits into Aave V3.
 /// Owner is immutable and there are no admin backdoors.
@@ -52,6 +64,22 @@ contract TimelockAaveVault {
         // Approve Pool for the amount
         require(asset.approve(address(pool), amount), "approve failed");
         // Supply to Aave on behalf of this vault. referralCode = 0
+        pool.supply(address(asset), amount, address(this), 0);
+        emit Deposited(msg.sender, amount);
+    }
+
+    /// @notice Deposits using EIP-2612 permit to set allowance within the same transaction.
+    function depositWithPermit(
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
+        require(amount > 0, "amount=0");
+        IERC20Permit(address(asset)).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        require(asset.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
+        require(asset.approve(address(pool), amount), "approve failed");
         pool.supply(address(asset), amount, address(this), 0);
         emit Deposited(msg.sender, amount);
     }
