@@ -23,9 +23,17 @@ import type {
 
 export interface IPoolInterface extends Interface {
   getFunction(
-    nameOrSignature: "getReserveData" | "supply" | "withdraw"
+    nameOrSignature:
+      | "ADDRESSES_PROVIDER"
+      | "getReserveData"
+      | "supply"
+      | "withdraw"
   ): FunctionFragment;
 
+  encodeFunctionData(
+    functionFragment: "ADDRESSES_PROVIDER",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "getReserveData",
     values: [AddressLike]
@@ -39,6 +47,10 @@ export interface IPoolInterface extends Interface {
     values: [AddressLike, BigNumberish, AddressLike]
   ): string;
 
+  decodeFunctionResult(
+    functionFragment: "ADDRESSES_PROVIDER",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "getReserveData",
     data: BytesLike
@@ -89,6 +101,8 @@ export interface IPool extends BaseContract {
   removeAllListeners<TCEvent extends TypedContractEvent>(
     event?: TCEvent
   ): Promise<this>;
+
+  ADDRESSES_PROVIDER: TypedContractMethod<[], [string], "view">;
 
   getReserveData: TypedContractMethod<
     [asset: AddressLike],
@@ -145,6 +159,9 @@ export interface IPool extends BaseContract {
     key: string | FunctionFragment
   ): T;
 
+  getFunction(
+    nameOrSignature: "ADDRESSES_PROVIDER"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getReserveData"
   ): TypedContractMethod<

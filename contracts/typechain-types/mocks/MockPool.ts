@@ -24,17 +24,28 @@ import type {
 export interface MockPoolInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "ADDRESSES_PROVIDER"
       | "aTokenAddresses"
+      | "addressesProvider"
       | "getReserveData"
       | "setATokenAddress"
+      | "setAddressesProvider"
       | "supply"
       | "userBalances"
       | "withdraw"
   ): FunctionFragment;
 
   encodeFunctionData(
+    functionFragment: "ADDRESSES_PROVIDER",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "aTokenAddresses",
     values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "addressesProvider",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getReserveData",
@@ -43,6 +54,10 @@ export interface MockPoolInterface extends Interface {
   encodeFunctionData(
     functionFragment: "setATokenAddress",
     values: [AddressLike, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "setAddressesProvider",
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "supply",
@@ -58,7 +73,15 @@ export interface MockPoolInterface extends Interface {
   ): string;
 
   decodeFunctionResult(
+    functionFragment: "ADDRESSES_PROVIDER",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "aTokenAddresses",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "addressesProvider",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -67,6 +90,10 @@ export interface MockPoolInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "setATokenAddress",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "setAddressesProvider",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "supply", data: BytesLike): Result;
@@ -120,7 +147,11 @@ export interface MockPool extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  ADDRESSES_PROVIDER: TypedContractMethod<[], [string], "view">;
+
   aTokenAddresses: TypedContractMethod<[arg0: AddressLike], [string], "view">;
+
+  addressesProvider: TypedContractMethod<[], [string], "view">;
 
   getReserveData: TypedContractMethod<
     [asset: AddressLike],
@@ -162,6 +193,12 @@ export interface MockPool extends BaseContract {
     "nonpayable"
   >;
 
+  setAddressesProvider: TypedContractMethod<
+    [provider: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
   supply: TypedContractMethod<
     [
       asset: AddressLike,
@@ -190,8 +227,14 @@ export interface MockPool extends BaseContract {
   ): T;
 
   getFunction(
+    nameOrSignature: "ADDRESSES_PROVIDER"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "aTokenAddresses"
   ): TypedContractMethod<[arg0: AddressLike], [string], "view">;
+  getFunction(
+    nameOrSignature: "addressesProvider"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getReserveData"
   ): TypedContractMethod<
@@ -234,6 +277,9 @@ export interface MockPool extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "setAddressesProvider"
+  ): TypedContractMethod<[provider: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "supply"
   ): TypedContractMethod<

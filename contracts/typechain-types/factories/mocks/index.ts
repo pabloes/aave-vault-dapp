@@ -2,5 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export { MockAToken__factory } from "./MockAToken__factory";
+export { MockAddressesProvider__factory } from "./MockAddressesProvider__factory";
 export { MockERC20__factory } from "./MockERC20__factory";
 export { MockPool__factory } from "./MockPool__factory";
+export { MockProtocolDataProvider__factory } from "./MockProtocolDataProvider__factory";

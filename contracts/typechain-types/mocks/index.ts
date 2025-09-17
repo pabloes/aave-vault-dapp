@@ -2,5 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { MockAToken } from "./MockAToken";
+export type { MockAddressesProvider } from "./MockAddressesProvider";
 export type { MockERC20 } from "./MockERC20";
 export type { MockPool } from "./MockPool";
+export type { MockProtocolDataProvider } from "./MockProtocolDataProvider";

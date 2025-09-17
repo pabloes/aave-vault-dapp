@@ -7,6 +7,7 @@ import { MockAToken } from "./MockAToken.sol";
 contract MockPool is IPool {
     mapping(address => address) public aTokenAddresses;
     mapping(address => mapping(address => uint256)) public userBalances;
+    address public addressesProvider;
     
     function setATokenAddress(address asset, address aToken) external {
         aTokenAddresses[asset] = aToken;
@@ -61,5 +62,13 @@ contract MockPool is IPool {
             address(0), // interestRateStrategyAddress
             0 // id
         );
+    }
+
+    function ADDRESSES_PROVIDER() external view returns (address) {
+        return addressesProvider;
+    }
+
+    function setAddressesProvider(address provider) external {
+        addressesProvider = provider;
     }
 }

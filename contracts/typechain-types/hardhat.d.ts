@@ -22,6 +22,18 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IPool__factory>;
     getContractFactory(
+      name: "IPoolAddressesProvider",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPoolAddressesProvider__factory>;
+    getContractFactory(
+      name: "IProtocolDataProvider",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IProtocolDataProvider__factory>;
+    getContractFactory(
+      name: "MockAddressesProvider",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MockAddressesProvider__factory>;
+    getContractFactory(
       name: "MockAToken",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.MockAToken__factory>;
@@ -34,17 +46,33 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.MockPool__factory>;
     getContractFactory(
-      name: "IERC20Permit",
+      name: "MockProtocolDataProvider",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.IERC20Permit__factory>;
+    ): Promise<Contracts.MockProtocolDataProvider__factory>;
     getContractFactory(
-      name: "TimelockAaveVault",
+      name: "IERC20Like",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.TimelockAaveVault__factory>;
+    ): Promise<Contracts.IERC20Like__factory>;
     getContractFactory(
-      name: "VaultFactory",
+      name: "IPoolAddressesProviderLite",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.VaultFactory__factory>;
+    ): Promise<Contracts.IPoolAddressesProviderLite__factory>;
+    getContractFactory(
+      name: "IPoolLite",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPoolLite__factory>;
+    getContractFactory(
+      name: "IProtocolDataProviderLite",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IProtocolDataProviderLite__factory>;
+    getContractFactory(
+      name: "MultiTokenTimelock",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MultiTokenTimelock__factory>;
+    getContractFactory(
+      name: "MultiTokenTimelockFactory",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MultiTokenTimelockFactory__factory>;
 
     getContractAt(
       name: "IERC20",
@@ -56,6 +84,21 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IPool>;
+    getContractAt(
+      name: "IPoolAddressesProvider",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPoolAddressesProvider>;
+    getContractAt(
+      name: "IProtocolDataProvider",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IProtocolDataProvider>;
+    getContractAt(
+      name: "MockAddressesProvider",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MockAddressesProvider>;
     getContractAt(
       name: "MockAToken",
       address: string | ethers.Addressable,
@@ -72,20 +115,40 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.MockPool>;
     getContractAt(
-      name: "IERC20Permit",
+      name: "MockProtocolDataProvider",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.IERC20Permit>;
+    ): Promise<Contracts.MockProtocolDataProvider>;
     getContractAt(
-      name: "TimelockAaveVault",
+      name: "IERC20Like",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.TimelockAaveVault>;
+    ): Promise<Contracts.IERC20Like>;
     getContractAt(
-      name: "VaultFactory",
+      name: "IPoolAddressesProviderLite",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.VaultFactory>;
+    ): Promise<Contracts.IPoolAddressesProviderLite>;
+    getContractAt(
+      name: "IPoolLite",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPoolLite>;
+    getContractAt(
+      name: "IProtocolDataProviderLite",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IProtocolDataProviderLite>;
+    getContractAt(
+      name: "MultiTokenTimelock",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MultiTokenTimelock>;
+    getContractAt(
+      name: "MultiTokenTimelockFactory",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MultiTokenTimelockFactory>;
 
     deployContract(
       name: "IERC20",
@@ -95,6 +158,18 @@ declare module "hardhat/types/runtime" {
       name: "IPool",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPool>;
+    deployContract(
+      name: "IPoolAddressesProvider",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPoolAddressesProvider>;
+    deployContract(
+      name: "IProtocolDataProvider",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IProtocolDataProvider>;
+    deployContract(
+      name: "MockAddressesProvider",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockAddressesProvider>;
     deployContract(
       name: "MockAToken",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -108,17 +183,33 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.MockPool>;
     deployContract(
-      name: "IERC20Permit",
+      name: "MockProtocolDataProvider",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IERC20Permit>;
+    ): Promise<Contracts.MockProtocolDataProvider>;
     deployContract(
-      name: "TimelockAaveVault",
+      name: "IERC20Like",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TimelockAaveVault>;
+    ): Promise<Contracts.IERC20Like>;
     deployContract(
-      name: "VaultFactory",
+      name: "IPoolAddressesProviderLite",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.VaultFactory>;
+    ): Promise<Contracts.IPoolAddressesProviderLite>;
+    deployContract(
+      name: "IPoolLite",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPoolLite>;
+    deployContract(
+      name: "IProtocolDataProviderLite",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IProtocolDataProviderLite>;
+    deployContract(
+      name: "MultiTokenTimelock",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MultiTokenTimelock>;
+    deployContract(
+      name: "MultiTokenTimelockFactory",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MultiTokenTimelockFactory>;
 
     deployContract(
       name: "IERC20",
@@ -130,6 +221,21 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IPool>;
+    deployContract(
+      name: "IPoolAddressesProvider",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPoolAddressesProvider>;
+    deployContract(
+      name: "IProtocolDataProvider",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IProtocolDataProvider>;
+    deployContract(
+      name: "MockAddressesProvider",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockAddressesProvider>;
     deployContract(
       name: "MockAToken",
       args: any[],
@@ -146,20 +252,40 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.MockPool>;
     deployContract(
-      name: "IERC20Permit",
+      name: "MockProtocolDataProvider",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IERC20Permit>;
+    ): Promise<Contracts.MockProtocolDataProvider>;
     deployContract(
-      name: "TimelockAaveVault",
+      name: "IERC20Like",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.TimelockAaveVault>;
+    ): Promise<Contracts.IERC20Like>;
     deployContract(
-      name: "VaultFactory",
+      name: "IPoolAddressesProviderLite",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.VaultFactory>;
+    ): Promise<Contracts.IPoolAddressesProviderLite>;
+    deployContract(
+      name: "IPoolLite",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPoolLite>;
+    deployContract(
+      name: "IProtocolDataProviderLite",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IProtocolDataProviderLite>;
+    deployContract(
+      name: "MultiTokenTimelock",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MultiTokenTimelock>;
+    deployContract(
+      name: "MultiTokenTimelockFactory",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MultiTokenTimelockFactory>;
 
     // default types
     getContractFactory(

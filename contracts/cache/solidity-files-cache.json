@@ -1,49 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/TimelockAaveVault.sol": {
-      "lastModificationDate": 1757968739162,
-      "contentHash": "14cf5eff79b5ee5e93a152d8f6f7be0a",
-      "sourceName": "contracts/TimelockAaveVault.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "viaIR": true,
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./interfaces/IAaveV3.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.24"
-      ],
-      "artifacts": [
-        "IERC20Permit",
-        "TimelockAaveVault"
-      ]
-    },
     "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/interfaces/IAaveV3.sol": {
-      "lastModificationDate": 1756318381815,
-      "contentHash": "f478c55b290ab2510ef45855928571d3",
+      "lastModificationDate": 1758061301919,
+      "contentHash": "2b0705f6cc21e2bf4ad78cd4eb5e8a46",
       "sourceName": "contracts/interfaces/IAaveV3.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -76,52 +36,14 @@
       ],
       "artifacts": [
         "IERC20",
-        "IPool"
-      ]
-    },
-    "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/VaultFactory.sol": {
-      "lastModificationDate": 1757964706375,
-      "contentHash": "7e389b3eed244f6d76e92bad126916fb",
-      "sourceName": "contracts/VaultFactory.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "viaIR": true,
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./TimelockAaveVault.sol",
-        "./interfaces/IAaveV3.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.24"
-      ],
-      "artifacts": [
-        "VaultFactory"
+        "IPool",
+        "IPoolAddressesProvider",
+        "IProtocolDataProvider"
       ]
     },
     "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/mocks/MockPool.sol": {
-      "lastModificationDate": 1756821051515,
-      "contentHash": "f666a7065873b433a078ec4e6e72481a",
+      "lastModificationDate": 1758057430293,
+      "contentHash": "e6358e00c15ca3f5fdf7e4b88fd4c11c",
       "sourceName": "contracts/mocks/MockPool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -235,6 +157,160 @@
       ],
       "artifacts": [
         "MockAToken"
+      ]
+    },
+    "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/MultiTokenTimelock.sol": {
+      "lastModificationDate": 1758096275813,
+      "contentHash": "8f0f716f5c3931c48e8a33accd4556d0",
+      "sourceName": "contracts/MultiTokenTimelock.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "IERC20Like",
+        "IPoolAddressesProviderLite",
+        "IPoolLite",
+        "IProtocolDataProviderLite",
+        "MultiTokenTimelock"
+      ]
+    },
+    "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/MultiTokenTimelockFactory.sol": {
+      "lastModificationDate": 1758061506727,
+      "contentHash": "42129288c785b9b18422a3048230db73",
+      "sourceName": "contracts/MultiTokenTimelockFactory.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./MultiTokenTimelock.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MultiTokenTimelockFactory"
+      ]
+    },
+    "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/mocks/MockAddressesProvider.sol": {
+      "lastModificationDate": 1758063109670,
+      "contentHash": "daf7287c4033f4f3e2c970bac0350c37",
+      "sourceName": "contracts/mocks/MockAddressesProvider.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MockAddressesProvider"
+      ]
+    },
+    "/Users/pabloestornut/dev/ZeroxWork/cursor-aave-vault/aave-vault-dapp/contracts/contracts/mocks/MockProtocolDataProvider.sol": {
+      "lastModificationDate": 1758062675688,
+      "contentHash": "57b18e7007c7c0a44cfa13c461d21be6",
+      "sourceName": "contracts/mocks/MockProtocolDataProvider.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MockProtocolDataProvider"
       ]
     }
   }

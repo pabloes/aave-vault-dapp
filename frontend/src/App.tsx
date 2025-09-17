@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { BrowserProvider, Contract, ContractFactory, formatUnits, parseUnits } from 'ethers'
+import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers'
 import MetaMaskSDK from '@metamask/sdk'
 import Countdown from './components/Countdown'
 import vaultAbiJson from './lib/abis/TimelockAaveVault.json'
-import factoryAbiJson from './lib/abis/VaultFactory.json'
+import multiTimelockAbiJson from './lib/abis/MultiTokenTimelock.json'
+import multiFactoryAbiJson from './lib/abis/MultiTokenTimelockFactory.json'
 
 const VAULT_ABI = (vaultAbiJson as any).abi
-const FACTORY_ABI = (factoryAbiJson as any).abi
-const FACTORY_BYTECODE = (factoryAbiJson as any).bytecode || ''
+const MT_ABI = (multiTimelockAbiJson as any).abi
+const MT_FACTORY_ABI = (multiFactoryAbiJson as any).abi
 
 // Aave Pool ABI for getReserveData and addresses provider accessor
 const POOL_ABI = [
@@ -24,6 +25,11 @@ const ADDRESSES_PROVIDER_ABI = [
 // PoolDataProvider minimal ABI
 const DATA_PROVIDER_ABI = [
   "function getAllReservesTokens() view returns (tuple(string symbol, address tokenAddress)[])"
+]
+
+// Data Provider: map asset -> aToken
+const DATA_PROVIDER_ADDRESSES_ABI = [
+  "function getReserveTokensAddresses(address asset) view returns (address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress)"
 ]
 
 // Rates from Protocol Data Provider (v3): liquidityRate is at index 5 (uint256, ray)
@@ -141,12 +147,11 @@ export default function App() {
 
   const [factoryAddress, setFactoryAddress] = useState<string>('')
   const [dataProviderAddr, setDataProviderAddr] = useState<string>('')
+  const [mtFactoryAddress, setMtFactoryAddress] = useState<string>('0x7800d050B10aCbf3bdcbF50D58612A6f215EA0E9')
   const [reserves, setReserves] = useState<{ symbol: string, address: string }[]>([])
+  const [reserveApys, setReserveApys] = useState<Record<string, string>>({})
   const [currentApy, setCurrentApy] = useState<string>('')
   const [addressesProviderAddr, setAddressesProviderAddr] = useState<string>('')
-  const [verifyAfterDeploy, setVerifyAfterDeploy] = useState<boolean>(false)
-  const [explorerApiKey, setExplorerApiKey] = useState<string>('')
-  const [verifyCommand, setVerifyCommand] = useState<string>('')
   const [isDeployingFactory, setIsDeployingFactory] = useState<boolean>(false)
   const [isLoadingVaults, setIsLoadingVaults] = useState<boolean>(false)
   const [isCreatingVault, setIsCreatingVault] = useState<boolean>(false)
@@ -154,11 +159,8 @@ export default function App() {
   const [importedVaults, setImportedVaults] = useState<string[]>([])
   const [importInput, setImportInput] = useState<string>('')
 
-  const [createParams, setCreateParams] = useState({
-    asset: '',
-    pool: '',
-    releaseIso: ''
-  })
+  const [createParams, setCreateParams] = useState({ asset: '', pool: '', releaseIso: '' })
+  const [createMtParams, setCreateMtParams] = useState({ releaseIso: '' })
 
   // Load saved settings from localStorage
   useEffect(() => {
@@ -168,10 +170,9 @@ export default function App() {
       const saved = JSON.parse(raw)
       if (saved.factoryAddress) setFactoryAddress(saved.factoryAddress)
       if (saved.addressesProviderAddr) setAddressesProviderAddr(saved.addressesProviderAddr)
+      if (saved.mtFactoryAddress) setMtFactoryAddress(saved.mtFactoryAddress)
       if (saved.dataProviderAddr) setDataProviderAddr(saved.dataProviderAddr)
       if (saved.createParams) setCreateParams((p) => ({ ...p, ...saved.createParams }))
-      if (typeof saved.verifyAfterDeploy === 'boolean') setVerifyAfterDeploy(saved.verifyAfterDeploy)
-      if (saved.explorerApiKey) setExplorerApiKey(saved.explorerApiKey)
     } catch {}
   }, [])
 
@@ -196,6 +197,13 @@ export default function App() {
       }
     })()
   }, [])
+
+  // Auto-load vaults when account is connected and factory address is set
+  useEffect(() => {
+    if (provider && account && mtFactoryAddress) {
+      refreshVaults()
+    }
+  }, [provider, account, mtFactoryAddress])
 
   // When pool or addressesProvider changes, resolve -> PoolDataProvider and load reserves
   useEffect(() => {
@@ -263,13 +271,54 @@ export default function App() {
     })()
   }, [provider, createParams.pool, createParams.asset, addressesProviderAddr, dataProviderAddr])
 
+  // Compute APY for all reserves to show in dropdowns
+  useEffect(() => {
+    if (!provider || reserves.length === 0) { setReserveApys({}); return }
+    (async () => {
+      try {
+        let poolAddr = ''
+        try {
+          if (addressesProviderAddr) {
+            poolAddr = await new Contract(addressesProviderAddr, ADDRESSES_PROVIDER_ABI, provider).getPool()
+          } else if (createParams.pool) {
+            poolAddr = createParams.pool
+          }
+        } catch {}
+        const pool = poolAddr ? new Contract(poolAddr, POOL_ABI, provider) : null
+        const dp = dataProviderAddr ? new Contract(dataProviderAddr, DATA_PROVIDER_RATES_ABI, provider) : null
+        const entries = await Promise.all(reserves.map(async (r) => {
+          try {
+            let rate: bigint | null = null
+            if (dp) {
+              const rd: any = await (dp as any).getReserveData(r.address)
+              rate = rd[5] as bigint
+            }
+            if (!rate && pool) {
+              const rd2: any = await (pool as any).getReserveData(r.address)
+              rate = rd2[3] as bigint
+            }
+            const apy = rate ? formatRayApy(rate) : ''
+            return [r.address.toLowerCase(), apy] as const
+          } catch {
+            return [r.address.toLowerCase(), ''] as const
+          }
+        }))
+        const map: Record<string,string> = {}
+        for (const [k,v] of entries) map[k] = v
+        setReserveApys(map)
+      } catch {
+        setReserveApys({})
+      }
+    })()
+  }, [provider, reserves, dataProviderAddr, addressesProviderAddr, createParams.pool])
+
   // Persist settings to localStorage
   useEffect(() => {
     try {
-      const st = { factoryAddress, addressesProviderAddr, dataProviderAddr, createParams, verifyAfterDeploy, explorerApiKey }
+      const st = { factoryAddress, addressesProviderAddr, dataProviderAddr, createParams, mtFactoryAddress }
       localStorage.setItem('avs_settings', JSON.stringify(st))
     } catch {}
-  }, [factoryAddress, addressesProviderAddr, dataProviderAddr, createParams, verifyAfterDeploy, explorerApiKey])
+  }, [factoryAddress, addressesProviderAddr, dataProviderAddr, createParams, mtFactoryAddress])
 
   // Persist imported vaults per-chain
   useEffect(() => {
@@ -278,11 +327,13 @@ export default function App() {
   }, [chainId, importedVaults])
 
   const [myVaults, setMyVaults] = useState<string[]>([])
+  const [myTimelocks, setMyTimelocks] = useState<string[]>([])
 
-  const factory = useMemo(() => {
-    if (!provider || !factoryAddress) return null
-    return new Contract(factoryAddress, FACTORY_ABI, provider)
-  }, [provider, factoryAddress])
+  const factory = null as any
+  const mtFactory = useMemo(() => {
+    if (!provider || !mtFactoryAddress) return null
+    return new Contract(mtFactoryAddress, MT_FACTORY_ABI, provider)
+  }, [provider, mtFactoryAddress])
 
   async function handleConnect() {
     const acc = await connectWallet()
@@ -334,11 +385,27 @@ export default function App() {
   }
 
   async function refreshVaults() {
-    if (!factory || !account) return
+    if (!account || !provider) return
     setIsLoadingVaults(true)
     try {
-      const list: string[] = await factory.getVaultsByOwner(account)
-      setMyVaults(list)
+      if (factory) {
+        const list: string[] = await factory.getVaultsByOwner(account)
+        setMyVaults(list)
+      }
+      if (mtFactoryAddress) {
+        try {
+          const code = await provider.getCode(mtFactoryAddress)
+          if (code && code !== '0x' && mtFactory) {
+            const t: string[] = await (mtFactory as any).getTimelocksByOwner(account)
+            setMyTimelocks(t)
+          } else {
+            // Not a contract on this network; clear list
+            setMyTimelocks([])
+          }
+        } catch (e) {
+          console.warn('Failed to load timelocks', e)
+        }
+      }
     } finally {
       setIsLoadingVaults(false)
     }
@@ -346,7 +413,7 @@ export default function App() {
 
   async function createVault(e: React.FormEvent) {
     e.preventDefault()
-    if (!factory || !provider) return
+    if (!provider) return
     
     try {
       const signer = await provider.getSigner()
@@ -382,79 +449,19 @@ export default function App() {
       
       // Create vault without aToken parameter - factory will derive it automatically
       setIsCreatingVault(true)
-      const tx = await (factory as any).connect(signer).createVault(createParams.asset, createParams.pool, rel)
-      await tx.wait()
-      await refreshVaults()
+      alert('Legacy Aave vault creation removed. Use multi-token timelock below.')
       
       // Keep asset and pool, clear only release date
       setCreateParams(p => ({ ...p, releaseIso: '' }))
     } catch (error: any) {
+      console.log(error.message)
       alert(`Error creating vault: ${error.message}`)
     } finally {
       setIsCreatingVault(false)
     }
   }
 
-  async function deployFactory() {
-    if (!provider) return
-    if (!FACTORY_BYTECODE) {
-      alert('Factory bytecode missing in ABI json')
-      return
-    }
-    try {
-      const signer = await provider.getSigner()
-      const cf = new ContractFactory(FACTORY_ABI as any, FACTORY_BYTECODE, signer)
-      setIsDeployingFactory(true)
-      const contract = await cf.deploy()
-      await contract.waitForDeployment()
-      const addr = await contract.getAddress()
-      setFactoryAddress(addr)
-      alert(`Factory deployed at ${addr}`)
-
-      if (verifyAfterDeploy) {
-        try {
-          const net = await provider.getNetwork()
-          const id = Number(net.chainId)
-          const networkName = (id === 1 ? 'mainnet' : id === 11155111 ? 'sepolia' : id === 137 ? 'polygon' : id === 42161 ? 'arbitrum' : id === 10 ? 'optimism' : id === 8453 ? 'base' : '')
-          const envVar = (id === 1 || id === 11155111) ? 'ETHERSCAN_API_KEY' : id === 137 ? 'POLYGONSCAN_API_KEY' : id === 42161 ? 'ARBISCAN_API_KEY' : id === 10 ? 'OPTIMISM_ETHERSCAN_API_KEY' : id === 8453 ? 'BASESCAN_API_KEY' : ''
-          if (!networkName || !envVar) {
-            setVerifyCommand('')
-          } else if (!explorerApiKey) {
-            setVerifyCommand('')
-          } else {
-            const cmd = `${envVar}=${explorerApiKey} npx hardhat verify --network ${networkName} ${addr}`
-            setVerifyCommand(cmd)
-          }
-        } catch {}
-      }
-    } catch (e: any) {
-      alert(`Deploy failed: ${e.message}`)
-    } finally {
-      setIsDeployingFactory(false)
-    }
-  }
-
-  async function prepareVerifyForAddress(addr: string) {
-    try {
-      if (!provider) return
-      const net = await provider.getNetwork()
-      const id = Number(net.chainId)
-      const networkName = (id === 1 ? 'mainnet' : id === 11155111 ? 'sepolia' : id === 137 ? 'polygon' : id === 42161 ? 'arbitrum' : id === 10 ? 'optimism' : id === 8453 ? 'base' : '')
-      const envVar = (id === 1 || id === 11155111) ? 'ETHERSCAN_API_KEY' : id === 137 ? 'POLYGONSCAN_API_KEY' : id === 42161 ? 'ARBISCAN_API_KEY' : id === 10 ? 'OPTIMISM_ETHERSCAN_API_KEY' : id === 8453 ? 'BASESCAN_API_KEY' : ''
-      if (!networkName || !envVar) {
-        setVerifyCommand('Unsupported network for verification helper.')
-        return
-      }
-      if (!explorerApiKey) {
-        setVerifyCommand('Please provide an Explorer API Key above to compose the verify command.')
-        return
-      }
-      const cmd = `${envVar}=${explorerApiKey} npx hardhat verify --network ${networkName} ${addr}`
-      setVerifyCommand(cmd)
-    } catch {
-      setVerifyCommand('Could not prepare verification command. Check network/provider.')
-    }
-  }
+  // Deploy & Verify features removed for MVP
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 24, fontFamily: 'Inter, system-ui, Arial' }}>
@@ -478,9 +485,11 @@ export default function App() {
 
       <section>
         <h2>Settings</h2>
-        <label>Factory Address:&nbsp;
-          <input style={{ width: 420 }} value={factoryAddress} onChange={e => setFactoryAddress(e.target.value)} placeholder="0x..." />
-        </label>
+        <div style={{ marginTop: 8 }}>
+          <label>Multi-Token Timelock Factory:&nbsp;
+            <input style={{ width: 420 }} value={mtFactoryAddress} onChange={e => setMtFactoryAddress(e.target.value)} placeholder="0x... (optional)" />
+          </label>
+        </div>
         <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
           <label>Addresses Provider (optional):&nbsp;
             <input style={{ width: 420 }} value={addressesProviderAddr} onChange={e => setAddressesProviderAddr(e.target.value)} placeholder="0x... (auto by chain)" />
@@ -488,25 +497,11 @@ export default function App() {
           <label>Pool Data Provider (auto from AddressesProvider):&nbsp;
             <input style={{ width: 420 }} value={dataProviderAddr} onChange={e => setDataProviderAddr(e.target.value)} placeholder="0x... (auto)" />
           </label>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input type="checkbox" checked={verifyAfterDeploy} onChange={e => setVerifyAfterDeploy(e.target.checked)} /> Verify after deploy
-          </label>
-          {verifyAfterDeploy && (
-            <label>Explorer API Key (for verification):&nbsp;
-              <input style={{ width: 420 }} value={explorerApiKey} onChange={e => setExplorerApiKey(e.target.value)} placeholder="Etherscan/Polygonscan/etc API key" />
-            </label>
-          )}
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-          <button onClick={refreshVaults} disabled={!factory || !account || isLoadingVaults}>Load My Vaults{isLoadingVaults ? '…' : ''}</button>
-          <button onClick={deployFactory} disabled={!account || isDeployingFactory}>Deploy Factory{isDeployingFactory ? '…' : ''}</button>
-          <button onClick={() => { if (factoryAddress) prepareVerifyForAddress(factoryAddress) }} disabled={!factoryAddress}>Verify</button>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input placeholder="Import vault address" value={importInput} onChange={e => setImportInput(e.target.value)} style={{ width: 280 }} />
             <button type="button" onClick={() => {
-              if (!importInput || !(window as any).ethers?.isAddress ? false : false) {
-                // noop; handled below with local isAddress
-              }
               if (!importInput || !(importInput.startsWith('0x') && importInput.length === 42)) { alert('Invalid address'); return }
               if (importedVaults.includes(importInput)) { alert('Already added'); return }
               setImportedVaults(v => [...v, importInput])
@@ -514,53 +509,57 @@ export default function App() {
             }}>Add</button>
           </div>
         </div>
-        {verifyCommand && (
-          <div style={{ marginTop: 8, padding: 8, background: '#f8f8f8', border: '1px solid #eee', borderRadius: 6 }}>
-            <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>Verify command (run in your terminal):</div>
-            <code style={{ fontSize: 12, wordBreak: 'break-all' }}>{verifyCommand}</code>
-          </div>
-        )}
       </section>
 
       <hr style={{ margin: '24px 0' }} />
 
+      {/* Legacy Create Vault removed */}
+
       <section>
-        <h2>Create Vault</h2>
-        <form onSubmit={createVault} style={{ display: 'grid', gap: 8, maxWidth: 640 }}>
-          {reserves.length > 0 ? (
-            <div style={{ display: 'grid', gap: 6 }}>
-              <select
-                value={createParams.asset}
-                onChange={e => setCreateParams(p => ({ ...p, asset: e.target.value }))}
-              >
-                {reserves.map(r => (
-                  <option key={r.address} value={r.address}>{r.symbol} ({r.address})</option>
-                ))}
-              </select>
-              {currentApy && <div style={{ fontSize: 12, color: '#666' }}>APY actual: {currentApy}</div>}
-            </div>
-          ) : (
-            <>
-              <input placeholder="Underlying token (ERC20) address" value={createParams.asset} onChange={e => setCreateParams(p => ({ ...p, asset: e.target.value }))} />
-              {currentApy && <div style={{ fontSize: 12, color: '#666' }}>APY actual: {currentApy}</div>}
-            </>
-          )}
-          <input placeholder="Aave V3 Pool address (auto from AddressesProvider)" value={createParams.pool} onChange={e => setCreateParams(p => ({ ...p, pool: e.target.value }))} />
-          <QuickDatePicker value={createParams.releaseIso} onChange={(v) => setCreateParams(p => ({ ...p, releaseIso: v }))} />
-          <button type="submit" disabled={!factory || !account || isCreatingVault || loadingReserves}>Create Vault{isCreatingVault ? '…' : ''}</button>
+        <h2>Create Timelock (multi-token)</h2>
+        <form onSubmit={async (e) => {
+          e.preventDefault()
+          if (!provider || !mtFactory) return
+          const signer = await provider.getSigner()
+          const rel = Math.floor(new Date(createMtParams.releaseIso).getTime() / 1000)
+          if (!rel || rel <= Math.floor(Date.now() / 1000)) { alert('Release time must be in the future'); return }
+          if (!addressesProviderAddr) { alert('AddressesProvider required to sweep all aTokens'); return }
+          const tx = await (mtFactory as any).connect(signer).createTimelock(addressesProviderAddr, rel)
+          await tx.wait()
+          setCreateMtParams({ releaseIso: '' })
+          await refreshVaults()
+        }} style={{ display: 'grid', gap: 8, maxWidth: 640 }}>
+          <QuickDatePicker value={createMtParams.releaseIso} onChange={(v) => setCreateMtParams({ releaseIso: v })} />
+          <button type="submit" disabled={!mtFactory || !account}>Create Timelock</button>
         </form>
-        <p style={{ fontSize: '14px', color: '#666', marginTop: '8px' }}>
-          💡 The aToken address is automatically derived from the pool - no need to provide it!
-        </p>
       </section>
 
       <hr style={{ margin: '24px 0' }} />
 
       <section>
-        <h2>My Vaults</h2>
-        <div style={{ display: 'grid', gap: 12 }}>
-          {(() => { const all = Array.from(new Set([...(importedVaults||[]), ...myVaults])); return all.length === 0 ? <div>No vaults found.</div> : all.map(addr => (
-            <VaultCard key={addr} vaultAddress={addr} provider={provider} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ margin: 0 }}>My Vaults</h2>
+          <button onClick={refreshVaults} disabled={!account || isLoadingVaults}>Load My Vaults{isLoadingVaults ? '…' : ''}</button>
+        </div>
+        <div style={{ display: 'grid', gap: 12, marginTop: 8 }}>
+          {(() => { const all = Array.from(new Set([...(importedVaults||[]), ...myVaults, ...myTimelocks])); return all.length === 0 ? <div>No vaults found.</div> : all.map(addr => (
+            <div key={addr} style={{ position: 'relative' }}>
+              {importedVaults.includes(addr) && (
+                <button
+                  style={{ position: 'absolute', right: 8, top: 8 }}
+                  onClick={() => setImportedVaults(v => v.filter(x => x !== addr))}
+                  title="Remove imported vault"
+                >Remove</button>
+              )}
+              <VaultCard
+                vaultAddress={addr}
+                provider={provider}
+                reserves={reserves}
+                addressesProviderAddr={addressesProviderAddr}
+                dataProviderAddr={dataProviderAddr}
+                reserveApys={reserveApys}
+              />
+            </div>
           )) })()}
         </div>
       </section>
@@ -568,6 +567,37 @@ export default function App() {
   )
 }
 
+function PositionCell({ provider, vaultAddress, asset, decimalsHint }: { provider: BrowserProvider | null, vaultAddress: string, asset: string, decimalsHint: number }) {
+  const [text, setText] = useState<string>('…')
+  useEffect(() => {
+    if (!provider) return
+    ;(async () => {
+      try {
+        const tl = new Contract(vaultAddress, MT_ABI, provider)
+        const [principal] = await (tl as any).getPosition(asset)
+        setText(formatUnits(principal, decimalsHint))
+      } catch { setText('—') }
+    })()
+  }, [provider, vaultAddress, asset, decimalsHint])
+  return <span>{text}</span>
+}
+
+function GrowthCell({ provider, vaultAddress, asset }: { provider: BrowserProvider | null, vaultAddress: string, asset: string }) {
+  const [text, setText] = useState<string>('')
+  useEffect(() => {
+    if (!provider) return
+    ;(async () => {
+      try {
+        const tl = new Contract(vaultAddress, MT_ABI, provider)
+        const [, , growthBps] = await (tl as any).getPosition(asset)
+        const bps = Number(growthBps)
+        const pct = (bps / 100).toFixed(2) + '%'
+        setText(pct)
+      } catch { setText('') }
+    })()
+  }, [provider, vaultAddress, asset])
+  return <span>{text}</span>
+}
 function QuickDatePicker({ value, onChange }: { value: string, onChange: (v: string) => void }) {
   function toLocalIso(dt: Date) {
     return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0,16)
@@ -623,42 +653,192 @@ function QuickDatePicker({ value, onChange }: { value: string, onChange: (v: str
   )
 }
 
-function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider: BrowserProvider | null }) {
-  const [info, setInfo] = useState<{ asset: string, aToken: string, releaseTime: number } | null>(null)
+function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, dataProviderAddr, reserveApys }: { vaultAddress: string, provider: BrowserProvider | null, reserves: {symbol:string, address:string}[], addressesProviderAddr: string, dataProviderAddr: string, reserveApys: Record<string,string> }) {
+  const [info, setInfo] = useState<{ asset?: string, aToken?: string, releaseTime: number, isMulti?: boolean } | null>(null)
   const [amount, setAmount] = useState<string>('')
+  const [tokenToDeposit, setTokenToDeposit] = useState<string>('')
+  const [tokenToSweep, setTokenToSweep] = useState<string>('')
   const [balance, setBalance] = useState<string>('0')
+  const [percent, setPercent] = useState<string>('100')
+  const [walletBal, setWalletBal] = useState<bigint>(0n)
+  const [newReleaseIso, setNewReleaseIso] = useState<string>('')
 
   const [decimals, setDecimals] = useState<number>(18)
   const [isDepositing, setIsDepositing] = useState<boolean>(false)
+  const [heldATokens, setHeldATokens] = useState<{ symbol: string, asset: string, aToken?: string, balance: string, apy?: string, kind: 'aToken' | 'underlying' }[]>([])
+  const [isExtending, setIsExtending] = useState<boolean>(false)
 
   useEffect(() => {
     if (!provider) return
-    const vault = new Contract(vaultAddress, VAULT_ABI, provider)
     ;(async () => {
-      const asset: string = await vault.asset()
-      const aToken: string = await vault.aToken()
-      const releaseTime: bigint = await vault.releaseTime()
-      const dec = await new Contract(asset, ["function decimals() view returns (uint8)"], provider).decimals()
-      setDecimals(Number(dec))
-      setInfo({ asset, aToken, releaseTime: Number(releaseTime) })
+      // Try TimelockAaveVault interface
+      try {
+        const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+        const asset: string = await vault.asset()
+        const aToken: string = await vault.aToken()
+        const releaseTime: bigint = await vault.releaseTime()
+        const dec = await new Contract(asset, ["function decimals() view returns (uint8)"], provider).decimals()
+        setDecimals(Number(dec))
+        setInfo({ asset, aToken, releaseTime: Number(releaseTime), isMulti: false })
+        return
+      } catch {}
+      // Fallback: MultiTokenTimelock
+      try {
+        const mt = new Contract(vaultAddress, MT_ABI, provider)
+        const releaseTime: bigint = await mt.releaseTime()
+        setInfo({ releaseTime: Number(releaseTime), isMulti: true })
+        setDecimals(18)
+        setBalance('')
+        return
+      } catch {}
+      setInfo(null)
     })()
   }, [provider, vaultAddress])
 
   async function refreshBalance() {
     if (!provider || !info) return
-    const bal: bigint = await new Contract(info.aToken, ["function balanceOf(address) view returns (uint256)"], provider).balanceOf(vaultAddress)
+    if (info.isMulti) { setBalance(''); return }
+    const bal: bigint = await new Contract(info.aToken!, ["function balanceOf(address) view returns (uint256)"], provider).balanceOf(vaultAddress)
     setBalance(formatUnits(bal, decimals))
   }
+  // Refresh wallet balance for selected token (owner's balance) and set decimals appropriately
+  useEffect(() => {
+    if (!provider) return
+    ;(async () => {
+      try {
+        const signer = await provider.getSigner()
+        const owner = await signer.getAddress()
+        let tokenAddr: string | null = null
+        if (info?.isMulti) {
+          tokenAddr = tokenToDeposit || null
+        } else if (info && info.asset) {
+          tokenAddr = info.asset
+        }
+        if (!tokenAddr) return
+        const erc20 = new Contract(tokenAddr, [
+          "function balanceOf(address) view returns (uint256)",
+          "function decimals() view returns (uint8)"
+        ], provider)
+        const tdec: number = Number(await (erc20 as any).decimals())
+        const bal: bigint = await (erc20 as any).balanceOf(owner)
+        setWalletBal(bal)
+        setDecimals(tdec)
+      } catch {}
+    })()
+  }, [provider, tokenToDeposit, info?.asset, info?.isMulti])
+
+  function setPercentAmount() {
+    const p = Math.max(0, Math.min(100, parseInt(percent || '0', 10)))
+    if (!Number.isFinite(p)) return
+    // amount = walletBal * p / 100
+    const target = (walletBal * BigInt(p)) / 100n
+    setAmount(formatUnits(target, decimals))
+  }
+
+
+  function formatRelativeRelease(tsSeconds: number): string {
+    const now = new Date()
+    const target = new Date(tsSeconds * 1000)
+    const ms = target.getTime() - now.getTime()
+    const abs = Math.abs(ms)
+    const minutes = Math.floor(abs / 60000)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+    const years = Math.floor(days / 365)
+    const months = Math.floor((days % 365) / 30)
+    const remDays = Math.floor((days % 365) % 30)
+    let span = ''
+    if (years > 0) span += `${years} year${years === 1 ? '' : 's'}`
+    if (months > 0) span += `${span ? ' ' : ''}${months} month${months === 1 ? '' : 's'}`
+    if (!span && days > 0) span = `${days} day${days === 1 ? '' : 's'}`
+    if (!span && hours > 0) span = `${hours} hour${hours === 1 ? '' : 's'}`
+    if (!span) span = `${minutes} minute${minutes === 1 ? '' : 's'}`
+    const when = target.toLocaleString()
+    return ms >= 0 ? `Releases on ${when} (in ${span})` : `Release time passed (${span} ago) • ${when}`
+  }
+
+  function getTokenLabel(addr: string): string {
+    const found = reserves.find(r => r.address.toLowerCase() === (addr||'').toLowerCase())
+    return found ? `${found.symbol} (${found.address})` : addr
+  }
+
 
   useEffect(() => { refreshBalance() }, [info])
+
+  async function fetchHeldTokens() {
+    if (!provider || !vaultAddress || !dataProviderAddr || reserves.length === 0) { setHeldATokens([]); return }
+    try {
+      const dp = new Contract(dataProviderAddr, DATA_PROVIDER_ADDRESSES_ABI, provider)
+      const results: { symbol: string, asset: string, aToken?: string, balance: string, apy?: string, kind: 'aToken' | 'underlying' }[] = []
+      for (const r of reserves) {
+        try {
+          const [aTokenAddr] = await (dp as any).getReserveTokensAddresses(r.address)
+          if (!aTokenAddr || aTokenAddr === '0x0000000000000000000000000000000000000000') continue
+          // aToken balance
+          const erc20a = new Contract(aTokenAddr, ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"], provider)
+          const balA: bigint = await (erc20a as any).balanceOf(vaultAddress)
+          if (balA > 0n) {
+            const decA = Number(await (erc20a as any).decimals())
+            const apy = reserveApys[r.address.toLowerCase()]
+            results.push({ symbol: r.symbol, asset: r.address, aToken: aTokenAddr, balance: formatUnits(balA, decA), apy, kind: 'aToken' })
+          }
+          // underlying balance
+          const erc20u = new Contract(r.address, ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"], provider)
+          const balU: bigint = await (erc20u as any).balanceOf(vaultAddress)
+          if (balU > 0n) {
+            const decU = Number(await (erc20u as any).decimals())
+            results.push({ symbol: r.symbol, asset: r.address, balance: formatUnits(balU, decU), kind: 'underlying' })
+          }
+        } catch { /* skip */ }
+      }
+      setHeldATokens(results)
+    } catch {
+      setHeldATokens([])
+    }
+  }
+
+  // Discover and list all aTokens held by the vault (from Aave reserves)
+  useEffect(() => { fetchHeldTokens() }, [provider, vaultAddress, dataProviderAddr, reserves, reserveApys])
 
   async function approveAndDeposit(e: React.FormEvent) {
     e.preventDefault()
     if (!provider || !info) return
     const signer = await provider.getSigner()
+    if (info.isMulti) {
+      if (!tokenToDeposit || !(tokenToDeposit.startsWith('0x') && tokenToDeposit.length === 42)) { alert('Token address invalid'); return }
+      const erc20 = new Contract(tokenToDeposit, [
+        "function approve(address spender, uint256 amount) returns (bool)",
+        "function allowance(address owner, address spender) view returns (uint256)",
+        "function decimals() view returns (uint8)"
+      ], provider)
+      const tdec = await (erc20 as any).decimals()
+      const amt = parseUnits(amount || '0', Number(tdec))
+      if (amt === 0n) return
+      // Confirm dialog
+      const tokenLabel = getTokenLabel(tokenToDeposit)
+      const relAbs = new Date(info.releaseTime * 1000).toLocaleString()
+      const relRel = formatRelativeRelease(info.releaseTime)
+      const ok = window.confirm(`You are about to deposit into Aave via Timelock:\n\nToken: ${tokenLabel}\nAmount: ${amount}\n\nRelease time: ${relAbs}\n${relRel}\n\nProceed?`)
+      if (!ok) return
+      // Approve timelock to pull tokens if needed, then call deposit (pool auto-resolved if zero)
+      const owner = await signer.getAddress()
+      const current: bigint = await (erc20 as any).allowance(owner, vaultAddress)
+      if (current < amt) {
+        const MAX = (1n << 256n) - 1n
+        const approveTx = await (erc20 as any).connect(signer).approve(vaultAddress, MAX)
+        await approveTx.wait()
+      }
+      const mt = new Contract(vaultAddress, MT_ABI, provider)
+      const zero = '0x0000000000000000000000000000000000000000'
+      const depTx = await (mt as any).connect(signer).deposit(tokenToDeposit, zero, amt)
+      await depTx.wait()
+      setAmount('')
+      await fetchHeldTokens()
+      return
+    }
     const amt = parseUnits(amount || '0', decimals)
     if (amt === 0n) return
-    const erc20 = new Contract(info.asset, [
+    const erc20 = new Contract(info.asset!, [
       "function approve(address spender, uint256 amount) returns (bool)",
       "function allowance(address owner, address spender) view returns (uint256)",
       "function balanceOf(address owner) view returns (uint256)",
@@ -668,6 +848,12 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
 
     setIsDepositing(true)
     try {
+      // Confirm dialog for legacy vault deposit
+      const tokenLabel = getTokenLabel(info.asset!)
+      const relAbs = new Date(info.releaseTime * 1000).toLocaleString()
+      const relRel = formatRelativeRelease(info.releaseTime)
+      const ok = window.confirm(`You are about to deposit:\n\nToken: ${tokenLabel}\nAmount: ${amount}\n\nRelease time: ${relAbs}\n${relRel}\n\nProceed?`)
+      if (!ok) return
       const owner = await signer.getAddress()
       // Try permit route
       try {
@@ -710,6 +896,7 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
   async function withdrawAll() {
     if (!provider || !info) return
     const signer = await provider.getSigner()
+    if (info.isMulti) { alert('Use sweep per token or sweep all aTokens'); return }
     const vault = new Contract(vaultAddress, VAULT_ABI, provider)
     const now = Math.floor(Date.now() / 1000)
     const release: number = info.releaseTime
@@ -725,6 +912,15 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
   async function sweepATokens() {
     if (!provider || !info) return
     const signer = await provider.getSigner()
+    if (info.isMulti) {
+      const mt = new Contract(vaultAddress, MT_ABI, provider)
+      const now = Math.floor(Date.now() / 1000)
+      const release: number = info.releaseTime
+      if (now < release) { alert('Vault is still locked'); return }
+      const tx = await (mt as any).connect(signer).sweepAllATokensAfterRelease(await signer.getAddress())
+      await tx.wait()
+      return
+    }
     const vault = new Contract(vaultAddress, VAULT_ABI, provider)
     const now = Math.floor(Date.now() / 1000)
     const release: number = info.releaseTime
@@ -740,6 +936,7 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
   async function withdrawPartial() {
     if (!provider || !info) return
     const signer = await provider.getSigner()
+    if (info.isMulti) { alert('Use per-token transfer out after release'); return }
     const vault = new Contract(vaultAddress, VAULT_ABI, provider)
     const now = Math.floor(Date.now() / 1000)
     const release: number = info.releaseTime
@@ -762,26 +959,159 @@ function VaultCard({ vaultAddress, provider }: { vaultAddress: string, provider:
         {info && <Countdown target={info.releaseTime} />}
       </div>
       <div style={{ display: 'grid', gap: 6, marginTop: 8, fontSize: 14 }}>
-        <div>aToken balance (est. withdrawable): {balance}</div>
-        {info && (
+        {!info?.isMulti && <div>aToken balance (est. withdrawable): {balance}</div>}
+        {info && !info.isMulti && (
           <>
             <div>Asset: {info.asset}</div>
             <div>aToken: {info.aToken}</div>
             <div>Release time: {new Date(info.releaseTime * 1000).toLocaleString()}</div>
           </>
         )}
+        {info && info.isMulti && (
+          <>
+            <div>Type: Multi-Token Timelock</div>
+            <div>Release time: {new Date(info.releaseTime * 1000).toLocaleString()}</div>
+          </>
+        )}
       </div>
 
-      <form onSubmit={approveAndDeposit} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+      <form onSubmit={approveAndDeposit} style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {info?.isMulti && (
+          <>
+            <select value={tokenToDeposit} onChange={e => setTokenToDeposit(e.target.value)} style={{ minWidth: 380 }}>
+              <option value="">Select token to deposit</option>
+              {reserves.map(r => {
+                const apy = reserveApys[r.address.toLowerCase()] || ''
+                const label = apy ? `${r.symbol} • ${apy}` : r.symbol
+                return <option key={r.address} value={r.address}>{label} ({r.address})</option>
+              })}
+            </select>
+          </>
+        )}
         <input placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} disabled={isDepositing} />
-        <button type="submit" disabled={isDepositing}>{isDepositing ? 'Processing…' : 'Approve/Permit + Deposit'}</button>
+        {info?.isMulti && (
+          <>
+         &lt;
+            <input style={{ width: 64 }} value={percent} onChange={e => setPercent(e.target.value)} />
+            <span>%</span>
+            <button type="button" onClick={setPercentAmount}>Set % amount</button>
+          </>
+        )}
+        <button type="submit" disabled={isDepositing}>{isDepositing ? 'Processing…' : (info?.isMulti ? 'Transfer to Timelock' : 'Approve/Permit + Deposit')}</button>
       </form>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button onClick={withdrawPartial}>Withdraw</button>
-        <button onClick={withdrawAll}>Withdraw All</button>
-        <button onClick={sweepATokens}>Sweep aTokens</button>
+        {!info?.isMulti && <button onClick={withdrawPartial}>Withdraw</button>}
+        {!info?.isMulti && <button onClick={withdrawAll}>Withdraw All</button>}
+        <button onClick={sweepATokens}>{info?.isMulti ? 'Sweep ALL aTokens' : 'Sweep aTokens'}</button>
+        {info?.isMulti && (
+          <>
+            <input placeholder="Sweep token address" value={tokenToSweep} onChange={e => setTokenToSweep(e.target.value)} style={{ width: 260 }} />
+            <button onClick={async () => {
+              if (!provider || !info) return
+              const signer = await provider.getSigner()
+              const now = Math.floor(Date.now() / 1000)
+              if (now < info.releaseTime) { alert('Vault is still locked'); return }
+              if (!tokenToSweep || !(tokenToSweep.startsWith('0x') && tokenToSweep.length === 42)) { alert('Token address invalid'); return }
+              const mt = new Contract(vaultAddress, MT_ABI, provider)
+              const tx = await (mt as any).connect(signer).sweepTokenAfterRelease(tokenToSweep, await signer.getAddress())
+              await tx.wait()
+              setTokenToSweep('')
+            }}>Sweep token</button>
+          </>
+        )}
       </div>
+
+      {/* Extend lock */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input type="datetime-local" value={newReleaseIso} onChange={e => setNewReleaseIso(e.target.value)} />
+        <button type="button" disabled={isExtending || !newReleaseIso} onClick={async () => {
+          if (!provider || !info) return
+          const ts = Math.floor(new Date(newReleaseIso).getTime() / 1000)
+          if (!ts || ts <= (info.releaseTime || 0)) { alert('New release must be greater than current'); return }
+          setIsExtending(true)
+          try {
+            const signer = await provider.getSigner()
+            if (info.isMulti) {
+              const mt = new Contract(vaultAddress, MT_ABI, provider)
+              const tx = await (mt as any).connect(signer).extendLock(ts)
+              await tx.wait()
+            } else {
+              const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+              const tx = await (vault as any).connect(signer).extendLock(ts)
+              await tx.wait()
+            }
+            setNewReleaseIso('')
+            // refresh local release time
+            setInfo(prev => prev ? { ...prev, releaseTime: ts } : prev)
+          } finally {
+            setIsExtending(false)
+          }
+        }}>{isExtending ? 'Extending…' : 'Extend lock'}</button>
+        {newReleaseIso && (
+          <div style={{ fontSize: 12, color: '#666' }}>
+            {formatRelativeRelease(Math.floor(new Date(newReleaseIso).getTime() / 1000))}
+          </div>
+        )}
+      </div>
+
+      {/* Held tokens summary */}
+      {heldATokens.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 600 }}>Tokens held by vault</div>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', marginTop: 6 }}>
+            <thead>
+              <tr style={{ textAlign: 'left' }}>
+                <th style={{ padding: '4px 6px' }}>Token</th>
+                <th style={{ padding: '4px 6px' }}>Principal</th>
+                <th style={{ padding: '4px 6px' }}>Withdrawable</th>
+                <th style={{ padding: '4px 6px' }}>Growth</th>
+                <th style={{ padding: '4px 6px' }}>APY</th>
+              </tr>
+            </thead>
+            <tbody>
+              {heldATokens.map((t) => {
+                if (t.kind !== 'aToken') return (
+                  <tr key={(t.aToken||t.asset)+t.kind}>
+                    <td style={{ padding: '4px 6px' }}>{t.symbol} (underlying)</td>
+                    <td style={{ padding: '4px 6px' }}>—</td>
+                    <td style={{ padding: '4px 6px' }}>{t.balance}</td>
+                    <td style={{ padding: '4px 6px' }}>—</td>
+                    <td style={{ padding: '4px 6px' }}>{t.apy || ''}</td>
+                  </tr>
+                )
+                return (
+                  <tr key={(t.aToken||t.asset)+t.kind}>
+                    <td style={{ padding: '4px 6px' }}>{t.symbol}</td>
+                    <td style={{ padding: '4px 6px' }} data-token={t.asset}>
+                      {/* principal via getPosition */}
+                      <PositionCell provider={provider} vaultAddress={vaultAddress} asset={t.asset} decimalsHint={decimals} />
+                    </td>
+                    <td style={{ padding: '4px 6px' }}>{t.balance}</td>
+                    <td style={{ padding: '4px 6px' }}>
+                      <GrowthCell provider={provider} vaultAddress={vaultAddress} asset={t.asset} />
+                    </td>
+                    <td style={{ padding: '4px 6px' }}>{t.apy || ''}</td>
+                    <td style={{ padding: '4px 6px' }}>
+                      <button onClick={async () => {
+                        if (!provider || !info) return
+                        const signer = await provider.getSigner()
+                        const now = Math.floor(Date.now() / 1000)
+                        if (now < info.releaseTime) { alert('Vault is still locked'); return }
+                        const mt = new Contract(vaultAddress, MT_ABI, provider)
+                        const tx = await (mt as any).connect(signer).withdrawAllUnderlying(t.asset, await signer.getAddress())
+                        await tx.wait()
+                        await refreshBalance()
+                        await fetchHeldTokens()
+                      }}>Withdraw All</button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

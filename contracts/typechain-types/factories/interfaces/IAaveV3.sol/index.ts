@@ -3,3 +3,5 @@
 /* eslint-disable */
 export { IERC20__factory } from "./IERC20__factory";
 export { IPool__factory } from "./IPool__factory";
+export { IPoolAddressesProvider__factory } from "./IPoolAddressesProvider__factory";
+export { IProtocolDataProvider__factory } from "./IProtocolDataProvider__factory";

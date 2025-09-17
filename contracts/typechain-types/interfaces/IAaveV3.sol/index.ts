@@ -3,3 +3,5 @@
 /* eslint-disable */
 export type { IERC20 } from "./IERC20";
 export type { IPool } from "./IPool";
+export type { IPoolAddressesProvider } from "./IPoolAddressesProvider";
+export type { IProtocolDataProvider } from "./IProtocolDataProvider";

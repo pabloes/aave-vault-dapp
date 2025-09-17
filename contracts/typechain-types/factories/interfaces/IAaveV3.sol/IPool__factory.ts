@@ -10,6 +10,19 @@ import type {
 
 const _abi = [
   {
+    inputs: [],
+    name: "ADDRESSES_PROVIDER",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
     inputs: [
       {
         internalType: "address",
