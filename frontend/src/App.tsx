@@ -2,11 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers'
 import MetaMaskSDK from '@metamask/sdk'
 import Countdown from './components/Countdown'
-import vaultAbiJson from './lib/abis/TimelockAaveVault.json'
 import multiTimelockAbiJson from './lib/abis/MultiTokenTimelock.json'
 import multiFactoryAbiJson from './lib/abis/MultiTokenTimelockFactory.json'
 
-const VAULT_ABI = (vaultAbiJson as any).abi
 const MT_ABI = (multiTimelockAbiJson as any).abi
 const MT_FACTORY_ABI = (multiFactoryAbiJson as any).abi
 
@@ -654,15 +652,15 @@ function QuickDatePicker({ value, onChange }: { value: string, onChange: (v: str
 }
 
 function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, dataProviderAddr, reserveApys }: { vaultAddress: string, provider: BrowserProvider | null, reserves: {symbol:string, address:string}[], addressesProviderAddr: string, dataProviderAddr: string, reserveApys: Record<string,string> }) {
-  const [info, setInfo] = useState<{ asset?: string, aToken?: string, releaseTime: number, isMulti?: boolean } | null>(null)
+  const [info, setInfo] = useState<{ releaseTime: number } | null>(null)
   const [amount, setAmount] = useState<string>('')
   const [tokenToDeposit, setTokenToDeposit] = useState<string>('')
   const [tokenToSweep, setTokenToSweep] = useState<string>('')
-  const [balance, setBalance] = useState<string>('0')
+  const [balance, setBalance] = useState<string>('')
   const [percent, setPercent] = useState<string>('100')
   const [walletBal, setWalletBal] = useState<bigint>(0n)
   const [newReleaseIso, setNewReleaseIso] = useState<string>('')
-
+  
   // Ownership (MultiTokenTimelock only)
   const [ownerAddr, setOwnerAddr] = useState<string>('')
   const [pendingOwner, setPendingOwner] = useState<string>('')
@@ -678,24 +676,11 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
   useEffect(() => {
     if (!provider) return
     ;(async () => {
-      // Try TimelockAaveVault interface
-      try {
-        const vault = new Contract(vaultAddress, VAULT_ABI, provider)
-        const asset: string = await vault.asset()
-        const aToken: string = await vault.aToken()
-        const releaseTime: bigint = await vault.releaseTime()
-        const dec = await new Contract(asset, ["function decimals() view returns (uint8)"], provider).decimals()
-        setDecimals(Number(dec))
-        setInfo({ asset, aToken, releaseTime: Number(releaseTime), isMulti: false })
-        return
-      } catch {}
-      // Fallback: MultiTokenTimelock
       try {
         const mt = new Contract(vaultAddress, MT_ABI, provider)
         const releaseTime: bigint = await mt.releaseTime()
-        setInfo({ releaseTime: Number(releaseTime), isMulti: true })
+        setInfo({ releaseTime: Number(releaseTime) })
         setDecimals(18)
-        setBalance('')
         try {
           const o: string = await (mt as any).owner()
           const p: string = await (mt as any).pendingOwner()
@@ -708,12 +693,7 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
     })()
   }, [provider, vaultAddress])
 
-  async function refreshBalance() {
-    if (!provider || !info) return
-    if (info.isMulti) { setBalance(''); return }
-    const bal: bigint = await new Contract(info.aToken!, ["function balanceOf(address) view returns (uint256)"], provider).balanceOf(vaultAddress)
-    setBalance(formatUnits(bal, decimals))
-  }
+  async function refreshBalance() { return }
   // Refresh wallet balance for selected token (owner's balance) and set decimals appropriately
   useEffect(() => {
     if (!provider) return
@@ -722,10 +702,8 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
         const signer = await provider.getSigner()
         const owner = await signer.getAddress()
         let tokenAddr: string | null = null
-        if (info?.isMulti) {
+        {
           tokenAddr = tokenToDeposit || null
-        } else if (info && info.asset) {
-          tokenAddr = info.asset
         }
         if (!tokenAddr) return
         const erc20 = new Contract(tokenAddr, [
@@ -738,7 +716,7 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
         setDecimals(tdec)
       } catch {}
     })()
-  }, [provider, tokenToDeposit, info?.asset, info?.isMulti])
+  }, [provider, tokenToDeposit])
 
   function setPercentAmount() {
     const p = Math.max(0, Math.min(100, parseInt(percent || '0', 10)))
@@ -817,140 +795,72 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
     e.preventDefault()
     if (!provider || !info) return
     const signer = await provider.getSigner()
-    if (info.isMulti) {
-      if (!tokenToDeposit || !(tokenToDeposit.startsWith('0x') && tokenToDeposit.length === 42)) { alert('Token address invalid'); return }
-      const erc20 = new Contract(tokenToDeposit, [
-        "function approve(address spender, uint256 amount) returns (bool)",
-        "function allowance(address owner, address spender) view returns (uint256)",
-        "function decimals() view returns (uint8)"
-      ], provider)
-      const tdec = await (erc20 as any).decimals()
-      const amt = parseUnits(amount || '0', Number(tdec))
-      if (amt === 0n) return
-      // Confirm dialog
-      const tokenLabel = getTokenLabel(tokenToDeposit)
-      const relAbs = new Date(info.releaseTime * 1000).toLocaleString()
-      const relRel = formatRelativeRelease(info.releaseTime)
-      const ok = window.confirm(`You are about to deposit into Aave via Timelock:\n\nToken: ${tokenLabel}\nAmount: ${amount}\n\nRelease time: ${relAbs}\n${relRel}\n\nProceed?`)
-      if (!ok) return
-      // Approve timelock to pull tokens if needed, then call deposit (pool auto-resolved if zero)
-      const owner = await signer.getAddress()
-      const current: bigint = await (erc20 as any).allowance(owner, vaultAddress)
-      if (current < amt) {
-        const MAX = (1n << 256n) - 1n
-        const approveTx = await (erc20 as any).connect(signer).approve(vaultAddress, MAX)
-        await approveTx.wait()
-      }
-      const mt = new Contract(vaultAddress, MT_ABI, provider)
-      const zero = '0x0000000000000000000000000000000000000000'
-      const depTx = await (mt as any).connect(signer).deposit(tokenToDeposit, zero, amt)
-      await depTx.wait()
-      setAmount('')
-      await fetchHeldTokens()
-      return
-    }
-    const amt = parseUnits(amount || '0', decimals)
-    if (amt === 0n) return
-    const erc20 = new Contract(info.asset!, [
+    if (!tokenToDeposit || !(tokenToDeposit.startsWith('0x') && tokenToDeposit.length === 42)) { alert('Token address invalid'); return }
+    const erc20 = new Contract(tokenToDeposit, [
       "function approve(address spender, uint256 amount) returns (bool)",
       "function allowance(address owner, address spender) view returns (uint256)",
-      "function balanceOf(address owner) view returns (uint256)",
-      "function nonces(address) view returns (uint256)",
-      "function name() view returns (string)"
+      "function decimals() view returns (uint8)"
     ], provider)
-
-    setIsDepositing(true)
-    try {
-      // Confirm dialog for legacy vault deposit
-      const tokenLabel = getTokenLabel(info.asset!)
-      const relAbs = new Date(info.releaseTime * 1000).toLocaleString()
-      const relRel = formatRelativeRelease(info.releaseTime)
-      const ok = window.confirm(`You are about to deposit:\n\nToken: ${tokenLabel}\nAmount: ${amount}\n\nRelease time: ${relAbs}\n${relRel}\n\nProceed?`)
-      if (!ok) return
-      const owner = await signer.getAddress()
-      // Try permit route
-      try {
-        const nonce: bigint = await (erc20 as any).nonces(owner)
-        const chain = await provider.getNetwork()
-        const domain = { name: await (erc20 as any).name(), version: '1', chainId: Number(chain.chainId), verifyingContract: info.asset }
-        const types: any = { Permit: [
-          { name: 'owner', type: 'address' },
-          { name: 'spender', type: 'address' },
-          { name: 'value', type: 'uint256' },
-          { name: 'nonce', type: 'uint256' },
-          { name: 'deadline', type: 'uint256' }
-        ] }
-        const deadline = Math.floor(Date.now() / 1000) + 3600
-        const message = { owner, spender: vaultAddress, value: amt, nonce, deadline }
-        const signature = await (signer as any).signTypedData(domain, types, message)
-        const r = '0x' + signature.slice(2, 66)
-        const s = '0x' + signature.slice(66, 130)
-        const v = parseInt(signature.slice(130, 132), 16)
-        const vault = new Contract(vaultAddress, VAULT_ABI, provider)
-        await (vault as any).connect(signer).depositWithPermit(amt, deadline, v, r, s)
-      } catch {
-        // fallback to approve + deposit
-        const allowance: bigint = await (erc20 as any).allowance(owner, vaultAddress)
-        if (allowance < amt) {
-          const tx = await (erc20 as any).connect(signer).approve(vaultAddress, amt)
-          await tx.wait()
-        }
-        const vault = new Contract(vaultAddress, VAULT_ABI, provider)
-        const tx2 = await (vault as any).connect(signer).deposit(amt)
-        await tx2.wait()
-      }
-    } finally {
-      setIsDepositing(false)
+    const tdec = await (erc20 as any).decimals()
+    const amt = parseUnits(amount || '0', Number(tdec))
+    if (amt === 0n) return
+    // Confirm dialog
+    const tokenLabel = getTokenLabel(tokenToDeposit)
+    const relAbs = new Date(info.releaseTime * 1000).toLocaleString()
+    const relRel = formatRelativeRelease(info.releaseTime)
+    const ok = window.confirm(`You are about to deposit into Aave via Timelock:\n\nToken: ${tokenLabel}\nAmount: ${amount}\n\nRelease time: ${relAbs}\n${relRel}\n\nProceed?`)
+    if (!ok) return
+    // Approve timelock to pull tokens if needed, then call deposit (pool auto-resolved if zero)
+    const owner = await signer.getAddress()
+    const current: bigint = await (erc20 as any).allowance(owner, vaultAddress)
+    if (current < amt) {
+      const MAX = (1n << 256n) - 1n
+      const approveTx = await (erc20 as any).connect(signer).approve(vaultAddress, MAX)
+      await approveTx.wait()
     }
+    const mt = new Contract(vaultAddress, MT_ABI, provider)
+    const zero = '0x0000000000000000000000000000000000000000'
+    const depTx = await (mt as any).connect(signer).deposit(tokenToDeposit, zero, amt)
+    await depTx.wait()
     setAmount('')
-    await refreshBalance()
+    await fetchHeldTokens()
+    return
   }
 
   async function withdrawAll() {
     if (!provider || !info) return
     const signer = await provider.getSigner()
-    if (info.isMulti) { alert('Use sweep per token or sweep all aTokens'); return }
-    const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+    const mt = new Contract(vaultAddress, MT_ABI, provider)
     const now = Math.floor(Date.now() / 1000)
     const release: number = info.releaseTime
     if (now < release) {
       alert('Vault is still locked')
       return
     }
-    const tx = await (vault as any).connect(signer).withdrawAll(await signer.getAddress())
+    const tx = await (mt as any).connect(signer).sweepAllATokensAfterRelease(await signer.getAddress())
     await tx.wait()
-    await refreshBalance()
+    return
   }
 
   async function sweepATokens() {
     if (!provider || !info) return
     const signer = await provider.getSigner()
-    if (info.isMulti) {
-      const mt = new Contract(vaultAddress, MT_ABI, provider)
-      const now = Math.floor(Date.now() / 1000)
-      const release: number = info.releaseTime
-      if (now < release) { alert('Vault is still locked'); return }
-      const tx = await (mt as any).connect(signer).sweepAllATokensAfterRelease(await signer.getAddress())
-      await tx.wait()
-      return
-    }
-    const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+    const mt = new Contract(vaultAddress, MT_ABI, provider)
     const now = Math.floor(Date.now() / 1000)
     const release: number = info.releaseTime
     if (now < release) {
       alert('Vault is still locked')
       return
     }
-    const tx = await (vault as any).connect(signer).sweepATokensAfterRelease(await signer.getAddress())
+    const tx = await (mt as any).connect(signer).sweepAllATokensAfterRelease(await signer.getAddress())
     await tx.wait()
-    await refreshBalance()
+    return
   }
 
   async function withdrawPartial() {
     if (!provider || !info) return
     const signer = await provider.getSigner()
-    if (info.isMulti) { alert('Use per-token transfer out after release'); return }
-    const vault = new Contract(vaultAddress, VAULT_ABI, provider)
+    const vault = new Contract(vaultAddress, MT_ABI, provider)
     const now = Math.floor(Date.now() / 1000)
     const release: number = info.releaseTime
     if (now < release) {
@@ -972,71 +882,48 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
         {info && <Countdown target={info.releaseTime} />}
       </div>
       <div style={{ display: 'grid', gap: 6, marginTop: 8, fontSize: 14 }}>
-        {!info?.isMulti && <div>aToken balance (est. withdrawable): {balance}</div>}
-        {info && !info.isMulti && (
-          <>
-            <div>Asset: {info.asset}</div>
-            <div>aToken: {info.aToken}</div>
-            <div>Release time: {new Date(info.releaseTime * 1000).toLocaleString()}</div>
-          </>
-        )}
-        {info && info.isMulti && (
-          <>
-            <div>Type: Multi-Token Timelock</div>
-            <div>Release time: {new Date(info.releaseTime * 1000).toLocaleString()}</div>
-          </>
-        )}
+        <div>Type: Multi-Token Timelock</div>
+        {info && <div>Release time: {new Date(info.releaseTime * 1000).toLocaleString()}</div>}
       </div>
 
       <form onSubmit={approveAndDeposit} style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {info?.isMulti && (
-          <>
-            <select value={tokenToDeposit} onChange={e => setTokenToDeposit(e.target.value)} style={{ minWidth: 380 }}>
-              <option value="">Select token to deposit</option>
-              {reserves.map(r => {
-                const apy = reserveApys[r.address.toLowerCase()] || ''
-                const label = apy ? `${r.symbol} • ${apy}` : r.symbol
-                return <option key={r.address} value={r.address}>{label} ({r.address})</option>
-              })}
-            </select>
-          </>
-        )}
+        <select value={tokenToDeposit} onChange={e => setTokenToDeposit(e.target.value)} style={{ minWidth: 380 }}>
+          <option value="">Select token to deposit</option>
+          {reserves.map(r => {
+            const apy = reserveApys[r.address.toLowerCase()] || ''
+            const label = apy ? `${r.symbol} • ${apy}` : r.symbol
+            return <option key={r.address} value={r.address}>{label} ({r.address})</option>
+          })}
+        </select>
         <input placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} disabled={isDepositing} />
-        {info?.isMulti && (
-          <>
-         &lt;
-            <input style={{ width: 64 }} value={percent} onChange={e => setPercent(e.target.value)} />
-            <span>%</span>
-            <button type="button" onClick={setPercentAmount}>Set % amount</button>
-          </>
-        )}
-        <button type="submit" disabled={isDepositing}>{isDepositing ? 'Processing…' : (info?.isMulti ? 'Transfer to Timelock' : 'Approve/Permit + Deposit')}</button>
+        <input style={{ width: 64 }} value={percent} onChange={e => setPercent(e.target.value)} />
+        <span>%</span>
+        <button type="button" onClick={setPercentAmount}>Set % amount</button>
+        <button type="submit" disabled={isDepositing}>{isDepositing ? 'Processing…' : 'Transfer to Timelock'}</button>
       </form>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        {!info?.isMulti && <button onClick={withdrawPartial}>Withdraw</button>}
-        {!info?.isMulti && <button onClick={withdrawAll}>Withdraw All</button>}
-        <button onClick={sweepATokens}>{info?.isMulti ? 'Sweep ALL aTokens' : 'Sweep aTokens'}</button>
-        {info?.isMulti && (
-          <>
-            <input placeholder="Sweep token address" value={tokenToSweep} onChange={e => setTokenToSweep(e.target.value)} style={{ width: 260 }} />
-            <button onClick={async () => {
-              if (!provider || !info) return
-              const signer = await provider.getSigner()
-              const now = Math.floor(Date.now() / 1000)
-              if (now < info.releaseTime) { alert('Vault is still locked'); return }
-              if (!tokenToSweep || !(tokenToSweep.startsWith('0x') && tokenToSweep.length === 42)) { alert('Token address invalid'); return }
-              const mt = new Contract(vaultAddress, MT_ABI, provider)
-              const tx = await (mt as any).connect(signer).sweepTokenAfterRelease(tokenToSweep, await signer.getAddress())
-              await tx.wait()
-              setTokenToSweep('')
-            }}>Sweep token</button>
-          </>
-        )}
+        <button onClick={withdrawPartial}>Withdraw</button>
+        <button onClick={withdrawAll}>Withdraw All</button>
+        <button onClick={sweepATokens}>Sweep ALL aTokens</button>
+        <>
+          <input placeholder="Sweep token address" value={tokenToSweep} onChange={e => setTokenToSweep(e.target.value)} style={{ width: 260 }} />
+          <button onClick={async () => {
+            if (!provider || !info) return
+            const signer = await provider.getSigner()
+            const now = Math.floor(Date.now() / 1000)
+            if (now < (info?.releaseTime || 0)) { alert('Vault is still locked'); return }
+            if (!tokenToSweep || !(tokenToSweep.startsWith('0x') && tokenToSweep.length === 42)) { alert('Token address invalid'); return }
+            const mt = new Contract(vaultAddress, MT_ABI, provider)
+            const tx = await (mt as any).connect(signer).sweepTokenAfterRelease(tokenToSweep, await signer.getAddress())
+            await tx.wait()
+            setTokenToSweep('')
+          }}>Sweep token</button>
+        </>
       </div>
-
+ 
       {/* Ownership (only for MultiTokenTimelock) */}
-      {info?.isMulti && (
+      {true && (
         <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
           <div style={{ fontWeight: 600 }}>Ownership</div>
           <div>Owner: {ownerAddr || '—'}</div>
@@ -1084,7 +971,7 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
           </div>
         </div>
       )}
-
+ 
       {/* Extend lock */}
       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="datetime-local" value={newReleaseIso} onChange={e => setNewReleaseIso(e.target.value)} />
@@ -1095,15 +982,9 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
           setIsExtending(true)
           try {
             const signer = await provider.getSigner()
-            if (info.isMulti) {
-              const mt = new Contract(vaultAddress, MT_ABI, provider)
-              const tx = await (mt as any).connect(signer).extendLock(ts)
-              await tx.wait()
-            } else {
-              const vault = new Contract(vaultAddress, VAULT_ABI, provider)
-              const tx = await (vault as any).connect(signer).extendLock(ts)
-              await tx.wait()
-            }
+            const mt = new Contract(vaultAddress, MT_ABI, provider)
+            const tx = await (mt as any).connect(signer).extendLock(ts)
+            await tx.wait()
             setNewReleaseIso('')
             // refresh local release time
             setInfo(prev => prev ? { ...prev, releaseTime: ts } : prev)
@@ -1117,7 +998,7 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
           </div>
         )}
       </div>
-
+ 
       {/* Held tokens summary */}
       {heldATokens.length > 0 && (
         <div style={{ marginTop: 12 }}>
@@ -1160,7 +1041,7 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
                         if (!provider || !info) return
                         const signer = await provider.getSigner()
                         const now = Math.floor(Date.now() / 1000)
-                        if (now < info.releaseTime) { alert('Vault is still locked'); return }
+                        if (now < (info?.releaseTime || 0)) { alert('Vault is still locked'); return }
                         const mt = new Contract(vaultAddress, MT_ABI, provider)
                         const tx = await (mt as any).connect(signer).withdrawAllUnderlying(t.asset, await signer.getAddress())
                         await tx.wait()
