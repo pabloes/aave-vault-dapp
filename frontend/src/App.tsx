@@ -663,6 +663,13 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
   const [walletBal, setWalletBal] = useState<bigint>(0n)
   const [newReleaseIso, setNewReleaseIso] = useState<string>('')
 
+  // Ownership (MultiTokenTimelock only)
+  const [ownerAddr, setOwnerAddr] = useState<string>('')
+  const [pendingOwner, setPendingOwner] = useState<string>('')
+  const [newOwner, setNewOwner] = useState<string>('')
+  const [isTransferringOwner, setIsTransferringOwner] = useState<boolean>(false)
+  const [isAcceptingOwner, setIsAcceptingOwner] = useState<boolean>(false)
+
   const [decimals, setDecimals] = useState<number>(18)
   const [isDepositing, setIsDepositing] = useState<boolean>(false)
   const [heldATokens, setHeldATokens] = useState<{ symbol: string, asset: string, aToken?: string, balance: string, apy?: string, kind: 'aToken' | 'underlying' }[]>([])
@@ -689,6 +696,12 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
         setInfo({ releaseTime: Number(releaseTime), isMulti: true })
         setDecimals(18)
         setBalance('')
+        try {
+          const o: string = await (mt as any).owner()
+          const p: string = await (mt as any).pendingOwner()
+          setOwnerAddr(o)
+          setPendingOwner(p)
+        } catch {}
         return
       } catch {}
       setInfo(null)
@@ -1021,6 +1034,56 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
           </>
         )}
       </div>
+
+      {/* Ownership (only for MultiTokenTimelock) */}
+      {info?.isMulti && (
+        <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+          <div style={{ fontWeight: 600 }}>Ownership</div>
+          <div>Owner: {ownerAddr || '—'}</div>
+          {pendingOwner && pendingOwner !== '0x0000000000000000000000000000000000000000' && (
+            <div>Pending owner: {pendingOwner}</div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input placeholder="New owner address" value={newOwner} onChange={e => setNewOwner(e.target.value)} style={{ width: 320 }} />
+            <button type="button" disabled={isTransferringOwner} onClick={async () => {
+              if (!provider || !newOwner) return
+              if (!(newOwner.startsWith('0x') && newOwner.length === 42)) { alert('Invalid address'); return }
+              setIsTransferringOwner(true)
+              try {
+                const signer = await provider.getSigner()
+                const mt = new Contract(vaultAddress, MT_ABI, provider)
+                const tx = await (mt as any).connect(signer).transferOwnership(newOwner)
+                await tx.wait()
+                setNewOwner('')
+                // refresh ownership info
+                const o: string = await (mt as any).owner()
+                const p: string = await (mt as any).pendingOwner()
+                setOwnerAddr(o)
+                setPendingOwner(p)
+              } finally {
+                setIsTransferringOwner(false)
+              }
+            }}>{isTransferringOwner ? 'Starting…' : 'Start transfer'}</button>
+            <button type="button" disabled={isAcceptingOwner} onClick={async () => {
+              if (!provider) return
+              setIsAcceptingOwner(true)
+              try {
+                const signer = await provider.getSigner()
+                const mt = new Contract(vaultAddress, MT_ABI, provider)
+                const tx = await (mt as any).connect(signer).acceptOwnership()
+                await tx.wait()
+                // refresh ownership info
+                const o: string = await (mt as any).owner()
+                const p: string = await (mt as any).pendingOwner()
+                setOwnerAddr(o)
+                setPendingOwner(p)
+              } finally {
+                setIsAcceptingOwner(false)
+              }
+            }}>{isAcceptingOwner ? 'Accepting…' : 'Accept ownership'}</button>
+          </div>
+        </div>
+      )}
 
       {/* Extend lock */}
       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>

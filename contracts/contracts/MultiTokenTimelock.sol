@@ -30,8 +30,11 @@ interface IProtocolDataProviderLite {
 contract MultiTokenTimelock {
     event LockExtended(uint256 oldReleaseTime, uint256 newReleaseTime);
     event TokenSwept(address indexed token, uint256 amount, address to);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    address public immutable owner;
+    address public owner;
+    address public pendingOwner;
     uint256 public releaseTime;
 
     IPoolAddressesProviderLite public immutable addressesProvider;
@@ -51,6 +54,21 @@ contract MultiTokenTimelock {
         owner = _owner;
         releaseTime = _releaseTime;
         addressesProvider = IPoolAddressesProviderLite(_addressesProvider);
+    }
+
+    // Two-step ownership transfer for safety
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "owner=0");
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Not pendingOwner");
+        address old = owner;
+        owner = pendingOwner;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(old, owner);
     }
 
     // Deposit an ERC-20 asset into Aave on behalf of this timelock.
