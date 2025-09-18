@@ -509,17 +509,7 @@ export default function App() {
             <input style={{ width: 420 }} value={dataProviderAddr} onChange={e => setDataProviderAddr(e.target.value)} placeholder="0x... (auto)" disabled={globalBusy} />
           </label>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input placeholder="Import vault address" value={importInput} onChange={e => setImportInput(e.target.value)} style={{ width: 280 }} disabled={globalBusy} />
-            <button type="button" disabled={globalBusy} onClick={() => {
-              if (!importInput || !(importInput.startsWith('0x') && importInput.length === 42)) { alert('Invalid address'); return }
-              if (importedVaults.includes(importInput)) { alert('Already added'); return }
-              setImportedVaults(v => [...v, importInput])
-              setImportInput('')
-            }}>Add</button>
-          </div>
-        </div>
+        
       </section>
 
       <hr style={{ margin: '24px 0' }} />
@@ -553,6 +543,15 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h2 style={{ margin: 0 }}>My Vaults</h2>
           <button onClick={() => withBusy(refreshVaults)} disabled={!account || isLoadingVaults || globalBusy}>Load My Vaults{isLoadingVaults ? '…' : ''}</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center', pointerEvents: globalBusy ? 'none' : 'auto', opacity: globalBusy ? 0.6 : 1 }}>
+          <input placeholder="Import vault address" value={importInput} onChange={e => setImportInput(e.target.value)} style={{ width: 280 }} disabled={globalBusy} />
+          <button type="button" disabled={globalBusy} onClick={() => {
+            if (!importInput || !(importInput.startsWith('0x') && importInput.length === 42)) { alert('Invalid address'); return }
+            if (importedVaults.includes(importInput)) { alert('Already added'); return }
+            setImportedVaults(v => [...v, importInput])
+            setImportInput('')
+          }}>Add</button>
         </div>
         <div style={{ display: 'grid', gap: 12, marginTop: 8 }}>
           {(() => { const all = Array.from(new Set([...(importedVaults||[]), ...myVaults, ...myTimelocks])); return all.length === 0 ? <div>No vaults found.</div> : all.map(addr => (
