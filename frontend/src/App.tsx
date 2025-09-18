@@ -143,6 +143,19 @@ export default function App() {
   const [account, setAccount] = useState<string | null>(null)
   const [chainId, setChainId] = useState<number | null>(null)
 
+  // Global busy overlay
+  const [busyCount, setBusyCount] = useState<number>(0)
+  const globalBusy = busyCount > 0
+  async function withBusy(fn: () => Promise<void>) {
+    try {
+      setBusyCount(c => c + 1)
+      try { (document.activeElement as any)?.blur?.() } catch {}
+      await fn()
+    } finally {
+      setBusyCount(c => Math.max(0, c - 1))
+    }
+  }
+
   const [factoryAddress, setFactoryAddress] = useState<string>('')
   const [dataProviderAddr, setDataProviderAddr] = useState<string>('')
   const [mtFactoryAddress, setMtFactoryAddress] = useState<string>('0x7800d050B10aCbf3bdcbF50D58612A6f215EA0E9')
@@ -387,8 +400,8 @@ export default function App() {
     setIsLoadingVaults(true)
     try {
       if (factory) {
-        const list: string[] = await factory.getVaultsByOwner(account)
-        setMyVaults(list)
+    const list: string[] = await factory.getVaultsByOwner(account)
+    setMyVaults(list)
       }
       if (mtFactoryAddress) {
         try {
@@ -462,44 +475,44 @@ export default function App() {
   // Deploy & Verify features removed for MVP
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 24, fontFamily: 'Inter, system-ui, Arial' }}>
+    <div style={{ position: 'relative', maxWidth: 900, margin: '0 auto', padding: 24, fontFamily: 'Inter, system-ui, Arial' }}>
       <h1>Aave Timelock Vaults</h1>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <button onClick={handleConnect} disabled={!!account}>{account ? short(account) : 'Connect Wallet'}</button>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', pointerEvents: globalBusy ? 'none' : 'auto', opacity: globalBusy ? 0.5 : 1 }}>
+        <button onClick={handleConnect} disabled={!!account || globalBusy}>{account ? short(account) : 'Connect Wallet'}</button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span>Chain:</span>
-          <select value={chainId ?? ''} onChange={e => { const id = Number(e.target.value); if (id) switchChain(id) }}>
+          <select value={chainId ?? ''} onChange={e => { const id = Number(e.target.value); if (id) switchChain(id) }} disabled={globalBusy}>
             <option value="">Select</option>
             {CHAIN_LIST.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>
-        <button onClick={downloadThisWebApp}>Download this web-app</button>
+        <button onClick={downloadThisWebApp} disabled={globalBusy}>Download this web-app</button>
         {/* Desktop app button removed */}
       </div>
 
       <hr style={{ margin: '24px 0' }} />
 
-      <section>
+      <section style={{ pointerEvents: globalBusy ? 'none' : 'auto', opacity: globalBusy ? 0.5 : 1 }}>
         <h2>Settings</h2>
         <div style={{ marginTop: 8 }}>
           <label>Multi-Token Timelock Factory:&nbsp;
-            <input style={{ width: 420 }} value={mtFactoryAddress} onChange={e => setMtFactoryAddress(e.target.value)} placeholder="0x... (optional)" />
-          </label>
+            <input style={{ width: 420 }} value={mtFactoryAddress} onChange={e => setMtFactoryAddress(e.target.value)} placeholder="0x... (optional)" disabled={globalBusy} />
+        </label>
         </div>
         <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
           <label>Addresses Provider (optional):&nbsp;
-            <input style={{ width: 420 }} value={addressesProviderAddr} onChange={e => setAddressesProviderAddr(e.target.value)} placeholder="0x... (auto by chain)" />
+            <input style={{ width: 420 }} value={addressesProviderAddr} onChange={e => setAddressesProviderAddr(e.target.value)} placeholder="0x... (auto by chain)" disabled={globalBusy} />
           </label>
           <label>Pool Data Provider (auto from AddressesProvider):&nbsp;
-            <input style={{ width: 420 }} value={dataProviderAddr} onChange={e => setDataProviderAddr(e.target.value)} placeholder="0x... (auto)" />
+            <input style={{ width: 420 }} value={dataProviderAddr} onChange={e => setDataProviderAddr(e.target.value)} placeholder="0x... (auto)" disabled={globalBusy} />
           </label>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input placeholder="Import vault address" value={importInput} onChange={e => setImportInput(e.target.value)} style={{ width: 280 }} />
-            <button type="button" onClick={() => {
+            <input placeholder="Import vault address" value={importInput} onChange={e => setImportInput(e.target.value)} style={{ width: 280 }} disabled={globalBusy} />
+            <button type="button" disabled={globalBusy} onClick={() => {
               if (!importInput || !(importInput.startsWith('0x') && importInput.length === 42)) { alert('Invalid address'); return }
               if (importedVaults.includes(importInput)) { alert('Already added'); return }
               setImportedVaults(v => [...v, importInput])
@@ -513,31 +526,33 @@ export default function App() {
 
       {/* Legacy Create Vault removed */}
 
-      <section>
+      <section style={{ pointerEvents: globalBusy ? 'none' : 'auto', opacity: globalBusy ? 0.5 : 1 }}>
         <h2>Create Timelock (multi-token)</h2>
         <form onSubmit={async (e) => {
           e.preventDefault()
-          if (!provider || !mtFactory) return
-          const signer = await provider.getSigner()
-          const rel = Math.floor(new Date(createMtParams.releaseIso).getTime() / 1000)
-          if (!rel || rel <= Math.floor(Date.now() / 1000)) { alert('Release time must be in the future'); return }
-          if (!addressesProviderAddr) { alert('AddressesProvider required to sweep all aTokens'); return }
-          const tx = await (mtFactory as any).connect(signer).createTimelock(addressesProviderAddr, rel)
-          await tx.wait()
-          setCreateMtParams({ releaseIso: '' })
-          await refreshVaults()
+          await withBusy(async () => {
+            if (!provider || !mtFactory) return
+            const signer = await provider.getSigner()
+            const rel = Math.floor(new Date(createMtParams.releaseIso).getTime() / 1000)
+            if (!rel || rel <= Math.floor(Date.now() / 1000)) { alert('Release time must be in the future'); return }
+            if (!addressesProviderAddr) { alert('AddressesProvider required to sweep all aTokens'); return }
+            const tx = await (mtFactory as any).connect(signer).createTimelock(addressesProviderAddr, rel)
+            await tx.wait()
+            setCreateMtParams({ releaseIso: '' })
+            await refreshVaults()
+          })
         }} style={{ display: 'grid', gap: 8, maxWidth: 640 }}>
           <QuickDatePicker value={createMtParams.releaseIso} onChange={(v) => setCreateMtParams({ releaseIso: v })} />
-          <button type="submit" disabled={!mtFactory || !account}>Create Timelock</button>
+          <button type="submit" disabled={!mtFactory || !account || globalBusy}>Create Timelock</button>
         </form>
       </section>
 
       <hr style={{ margin: '24px 0' }} />
 
-      <section>
+      <section style={{ pointerEvents: globalBusy ? 'none' : 'auto', opacity: globalBusy ? 0.5 : 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h2 style={{ margin: 0 }}>My Vaults</h2>
-          <button onClick={refreshVaults} disabled={!account || isLoadingVaults}>Load My Vaults{isLoadingVaults ? '…' : ''}</button>
+          <button onClick={() => withBusy(refreshVaults)} disabled={!account || isLoadingVaults || globalBusy}>Load My Vaults{isLoadingVaults ? '…' : ''}</button>
         </div>
         <div style={{ display: 'grid', gap: 12, marginTop: 8 }}>
           {(() => { const all = Array.from(new Set([...(importedVaults||[]), ...myVaults, ...myTimelocks])); return all.length === 0 ? <div>No vaults found.</div> : all.map(addr => (
@@ -556,11 +571,21 @@ export default function App() {
                 addressesProviderAddr={addressesProviderAddr}
                 dataProviderAddr={dataProviderAddr}
                 reserveApys={reserveApys}
+                withBusy={withBusy}
+                globalBusy={globalBusy}
               />
             </div>
           )) })()}
         </div>
       </section>
+
+      {globalBusy && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: '12px 16px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: 14 }}>
+            Processing…
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -651,7 +676,7 @@ function QuickDatePicker({ value, onChange }: { value: string, onChange: (v: str
   )
 }
 
-function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, dataProviderAddr, reserveApys }: { vaultAddress: string, provider: BrowserProvider | null, reserves: {symbol:string, address:string}[], addressesProviderAddr: string, dataProviderAddr: string, reserveApys: Record<string,string> }) {
+function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, dataProviderAddr, reserveApys, withBusy, globalBusy }: { vaultAddress: string, provider: BrowserProvider | null, reserves: {symbol:string, address:string}[], addressesProviderAddr: string, dataProviderAddr: string, reserveApys: Record<string,string>, withBusy: (fn: () => Promise<void>) => Promise<void>, globalBusy: boolean }) {
   const [info, setInfo] = useState<{ releaseTime: number } | null>(null)
   const [amount, setAmount] = useState<string>('')
   const [tokenToDeposit, setTokenToDeposit] = useState<string>('')
@@ -794,37 +819,37 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
   async function approveAndDeposit(e: React.FormEvent) {
     e.preventDefault()
     if (!provider || !info) return
+    await withBusy(async () => {
     const signer = await provider.getSigner()
-    if (!tokenToDeposit || !(tokenToDeposit.startsWith('0x') && tokenToDeposit.length === 42)) { alert('Token address invalid'); return }
-    const erc20 = new Contract(tokenToDeposit, [
+      if (!tokenToDeposit || !(tokenToDeposit.startsWith('0x') && tokenToDeposit.length === 42)) { alert('Token address invalid'); return }
+      const erc20 = new Contract(tokenToDeposit, [
       "function approve(address spender, uint256 amount) returns (bool)",
       "function allowance(address owner, address spender) view returns (uint256)",
-      "function decimals() view returns (uint8)"
+        "function decimals() view returns (uint8)"
     ], provider)
-    const tdec = await (erc20 as any).decimals()
-    const amt = parseUnits(amount || '0', Number(tdec))
-    if (amt === 0n) return
-    // Confirm dialog
-    const tokenLabel = getTokenLabel(tokenToDeposit)
-    const relAbs = new Date(info.releaseTime * 1000).toLocaleString()
-    const relRel = formatRelativeRelease(info.releaseTime)
-    const ok = window.confirm(`You are about to deposit into Aave via Timelock:\n\nToken: ${tokenLabel}\nAmount: ${amount}\n\nRelease time: ${relAbs}\n${relRel}\n\nProceed?`)
-    if (!ok) return
-    // Approve timelock to pull tokens if needed, then call deposit (pool auto-resolved if zero)
-    const owner = await signer.getAddress()
-    const current: bigint = await (erc20 as any).allowance(owner, vaultAddress)
-    if (current < amt) {
-      const MAX = (1n << 256n) - 1n
-      const approveTx = await (erc20 as any).connect(signer).approve(vaultAddress, MAX)
-      await approveTx.wait()
-    }
-    const mt = new Contract(vaultAddress, MT_ABI, provider)
-    const zero = '0x0000000000000000000000000000000000000000'
-    const depTx = await (mt as any).connect(signer).deposit(tokenToDeposit, zero, amt)
-    await depTx.wait()
+      const tdec = await (erc20 as any).decimals()
+      const amt = parseUnits(amount || '0', Number(tdec))
+      if (amt === 0n) return
+      const tokenLabel = getTokenLabel(tokenToDeposit)
+      const relAbs = new Date(info.releaseTime * 1000).toLocaleString()
+      const relRel = formatRelativeRelease(info.releaseTime)
+      const ok = window.confirm(`You are about to deposit into Aave via Timelock:\n\nToken: ${tokenLabel}\nAmount: ${amount}\n\nRelease time: ${relAbs}\n${relRel}\n\nProceed?`)
+      if (!ok) return
+      const owner = await signer.getAddress()
+      const current: bigint = await (erc20 as any).allowance(owner, vaultAddress)
+      if (current < amt) {
+        const MAX = (1n << 256n) - 1n
+        const approveTx = await (erc20 as any).connect(signer).approve(vaultAddress, MAX)
+        await approveTx.wait()
+      }
+      const mt = new Contract(vaultAddress, MT_ABI, provider)
+      const zero = '0x0000000000000000000000000000000000000000'
+      const depTx = await (mt as any).connect(signer).deposit(tokenToDeposit, zero, amt)
+      await depTx.wait()
     setAmount('')
-    await fetchHeldTokens()
-    return
+      await fetchHeldTokens()
+      return
+    })
   }
 
   async function withdrawAll() {
@@ -886,8 +911,8 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
         {info && <div>Release time: {new Date(info.releaseTime * 1000).toLocaleString()}</div>}
       </div>
 
-      <form onSubmit={approveAndDeposit} style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={tokenToDeposit} onChange={e => setTokenToDeposit(e.target.value)} style={{ minWidth: 380 }}>
+      <form onSubmit={approveAndDeposit} style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center', pointerEvents: globalBusy ? 'none' : 'auto', opacity: globalBusy ? 0.6 : 1 }}>
+        <select value={tokenToDeposit} onChange={e => setTokenToDeposit(e.target.value)} style={{ minWidth: 380 }} disabled={globalBusy}>
           <option value="">Select token to deposit</option>
           {reserves.map(r => {
             const apy = reserveApys[r.address.toLowerCase()] || ''
@@ -895,20 +920,20 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
             return <option key={r.address} value={r.address}>{label} ({r.address})</option>
           })}
         </select>
-        <input placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} disabled={isDepositing} />
-        <input style={{ width: 64 }} value={percent} onChange={e => setPercent(e.target.value)} />
+        <input placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} disabled={isDepositing || globalBusy} />
+        <input style={{ width: 64 }} value={percent} onChange={e => setPercent(e.target.value)} disabled={globalBusy} />
         <span>%</span>
-        <button type="button" onClick={setPercentAmount}>Set % amount</button>
-        <button type="submit" disabled={isDepositing}>{isDepositing ? 'Processing…' : 'Transfer to Timelock'}</button>
+        <button type="button" onClick={setPercentAmount} disabled={globalBusy}>Set % amount</button>
+        <button type="submit" disabled={isDepositing || globalBusy}>{isDepositing ? 'Processing…' : 'Transfer to Timelock'}</button>
       </form>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button onClick={withdrawPartial}>Withdraw</button>
-        <button onClick={withdrawAll}>Withdraw All</button>
-        <button onClick={sweepATokens}>Sweep ALL aTokens</button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, pointerEvents: globalBusy ? 'none' : 'auto', opacity: globalBusy ? 0.6 : 1 }}>
+        <button onClick={() => withBusy(withdrawPartial)} disabled={globalBusy}>Withdraw</button>
+        <button onClick={() => withBusy(withdrawAll)} disabled={globalBusy}>Withdraw All</button>
+        <button onClick={() => withBusy(sweepATokens)} disabled={globalBusy}>Sweep ALL aTokens</button>
         <>
-          <input placeholder="Sweep token address" value={tokenToSweep} onChange={e => setTokenToSweep(e.target.value)} style={{ width: 260 }} />
-          <button onClick={async () => {
+          <input placeholder="Sweep token address" value={tokenToSweep} onChange={e => setTokenToSweep(e.target.value)} style={{ width: 260 }} disabled={globalBusy} />
+          <button disabled={globalBusy} onClick={async () => {
             if (!provider || !info) return
             const signer = await provider.getSigner()
             const now = Math.floor(Date.now() / 1000)
@@ -998,7 +1023,7 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
           </div>
         )}
       </div>
- 
+
       {/* Held tokens summary */}
       {heldATokens.length > 0 && (
         <div style={{ marginTop: 12 }}>
@@ -1054,7 +1079,7 @@ function VaultCard({ vaultAddress, provider, reserves, addressesProviderAddr, da
               })}
             </tbody>
           </table>
-        </div>
+      </div>
       )}
     </div>
   )
