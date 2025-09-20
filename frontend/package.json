@@ -7,7 +7,25 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "build:single": "tsc -b && vite build --emptyOutDir"
+    "build:single": "tsc -b && vite build --emptyOutDir",
+    "build:lib": "tsc -b && vite build -c vite.lib.config.ts",
+    "build:html-module": "npm run build && node scripts/make-html-module.cjs"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/aave-vault-app.es.js",
+      "require": "./dist/aave-vault-app.cjs.js",
+      "default": "./dist/aave-vault-app.umd.js"
+    },
+    "./html": {
+      "import": "./dist/aave-vault-html.js"
+    }
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@metamask/sdk": "^0.33.0",
